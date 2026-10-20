@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase, Profile, Message } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
+import SiteFooter from '@/components/SiteFooter';
 
 type Thread = { otherId: string; last: Message; profile?: Profile };
 
@@ -32,7 +33,7 @@ export default function MessagesInbox() {
         const other = m.sender_id === user.id ? m.receiver_id : m.sender_id;
         if (!map.has(other)) map.set(other, m);
       }
-      const otherIds = [...map.keys()];
+      const otherIds = Array.from(map.keys());
       let profiles: Profile[] = [];
       if (otherIds.length) {
         const { data: ps } = await supabase.from('profiles').select('*').in('id', otherIds);
@@ -82,6 +83,7 @@ export default function MessagesInbox() {
           )}
         </div>
       </main>
+      <SiteFooter />
     </div>
   );
 }
