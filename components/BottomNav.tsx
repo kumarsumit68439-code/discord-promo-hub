@@ -2,20 +2,27 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { MessageCircle, Users, MessagesSquare, Music2, User } from 'lucide-react';
+import {
+  MessageCircle,
+  Users,
+  MessagesSquare,
+  Music2,
+  User,
+  Shield,
+  Search,
+} from 'lucide-react';
 import { useAuth } from './AuthProvider';
 
 export default function BottomNav() {
   const path = usePathname();
-  const { user, appUser } = useAuth();
+  const { user, appUser, isAdmin } = useAuth();
 
-  // Hide on login and deep chat
   if (!user || path === '/login' || path.startsWith('/auth')) return null;
   if (path.startsWith('/messages/') && path !== '/messages') return null;
 
   const items = [
     { href: '/', label: 'Promo', icon: MessageCircle },
-    { href: '/users', label: 'Search', icon: Users },
+    { href: '/users', label: 'Search', icon: Search },
     { href: '/messages', label: 'Chat', icon: MessagesSquare },
     { href: '/music', label: 'Music', icon: Music2 },
     {
@@ -23,11 +30,12 @@ export default function BottomNav() {
       label: 'Profile',
       icon: User,
     },
+    ...(isAdmin ? [{ href: '/admin', label: 'Admin', icon: Shield }] : []),
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-discord-dark/95 backdrop-blur-md sm:hidden">
-      <div className="mx-auto flex max-w-lg items-stretch justify-around px-1 py-1.5">
+      <div className="mx-auto flex max-w-lg items-stretch justify-around px-0.5 py-1.5 overflow-x-auto">
         {items.map(({ href, label, icon: Icon }) => {
           const active =
             href === '/'
@@ -37,7 +45,7 @@ export default function BottomNav() {
             <Link
               key={href + label}
               href={href}
-              className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium ${
+              className={`flex min-w-[3.2rem] flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium ${
                 active ? 'text-discord-blurple' : 'text-gray-500'
               }`}
             >
