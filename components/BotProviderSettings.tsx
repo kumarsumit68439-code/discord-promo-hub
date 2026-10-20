@@ -78,9 +78,7 @@ export default function BotProviderSettings() {
   }
 
   const connected = settings.find((item) => item.provider === provider);
-  const freeGroqModels = provider === 'groq'
-    ? [...GROQ_FREE_CHAT_MODELS].filter((item) => models.includes(item) || models.length === 0 || true)
-    : [];
+  const freeGroqModels = provider === 'groq' ? [...GROQ_FREE_CHAT_MODELS] : [];
   const otherLiveModels = models.filter((item) => !freeGroqModels.includes(item as typeof freeGroqModels[number]));
   return (
     <section className="mt-8 rounded-2xl border border-white/10 bg-discord-card p-5 sm:p-6">
