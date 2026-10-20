@@ -18,6 +18,7 @@ import {
   MessagesSquare,
   Music2,
   User,
+  UserCircle2,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -69,7 +70,10 @@ export default function Home() {
     }
     if (!form.title.trim() || !form.url.trim()) return;
     setSubmitting(true);
-    const tags = form.tags.split(',').map((t) => t.trim()).filter(Boolean);
+    const tags = form.tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
     const { error } = await supabase.from('listings').insert({
       title: form.title.trim(),
       description: form.description.trim() || null,
@@ -126,12 +130,10 @@ export default function Home() {
             Promote Your <span className="text-discord-blurple">Discord Server</span> & Website
           </h2>
           <p className="mx-auto max-w-xl text-gray-400">
-            Sab listings public hain — har user dekh sakta hai. Search, follow, message, music —
-            sab pages top nav / bottom nav / footer mein available hain.
+            Public promos · har card pe link + publisher profile check
           </p>
         </section>
 
-        {/* Quick links to all features */}
         <div className="mb-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {quick.map((q) => (
             <Link
@@ -163,9 +165,7 @@ export default function Home() {
                 key={f}
                 onClick={() => setFilter(f)}
                 className={`rounded-lg px-4 py-2 text-sm font-medium ${
-                  filter === f
-                    ? 'bg-discord-blurple text-white'
-                    : 'bg-discord-card text-gray-400'
+                  filter === f ? 'bg-discord-blurple text-white' : 'bg-discord-card text-gray-400'
                 }`}
               >
                 {f === 'all' ? 'All' : f === 'discord' ? 'Discord' : 'Website'}
@@ -177,7 +177,7 @@ export default function Home() {
         {loading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-40 animate-pulse rounded-xl bg-discord-card" />
+              <div key={i} className="h-48 animate-pulse rounded-xl bg-discord-card" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
@@ -196,43 +196,101 @@ export default function Home() {
             {filtered.map((listing) => (
               <div
                 key={listing.id}
-                className="group relative flex flex-col rounded-xl border border-white/5 bg-discord-card p-5 hover:border-discord-blurple/40"
+                className="relative flex flex-col rounded-xl border border-white/5 bg-discord-card p-5 hover:border-discord-blurple/40"
               >
                 {user && listing.user_id === user.id && (
                   <button
+                    type="button"
                     onClick={() => deleteListing(listing.id)}
-                    className="absolute right-3 top-3 text-gray-600 hover:text-red-400"
+                    className="absolute right-3 top-3 z-10 text-gray-600 hover:text-red-400"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 )}
-                <a href={listing.url} target="_blank" rel="noopener noreferrer" className="flex flex-1 flex-col">
-                  <div className="mb-3 flex justify-between">
-                    <div
-                      className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                        listing.type === 'discord'
-                          ? 'bg-discord-blurple/20 text-discord-blurple'
-                          : 'bg-emerald-500/20 text-emerald-400'
-                      }`}
-                    >
-                      {listing.type === 'discord' ? <Server className="h-5 w-5" /> : <Globe className="h-5 w-5" />}
-                    </div>
-                    <ExternalLink className="h-4 w-4 text-gray-600" />
+
+                {/* Type icon + title */}
+                <div className="mb-3 flex items-start gap-3">
+                  <div
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${
+                      listing.type === 'discord'
+                        ? 'bg-discord-blurple/20 text-discord-blurple'
+                        : 'bg-emerald-500/20 text-emerald-400'
+                    }`}
+                  >
+                    {listing.type === 'discord' ? (
+                      <Server className="h-5 w-5" />
+                    ) : (
+                      <Globe className="h-5 w-5" />
+                    )}
                   </div>
-                  <h3 className="font-semibold text-white">{listing.title}</h3>
-                  {listing.description && (
-                    <p className="mt-1 line-clamp-2 text-sm text-gray-400">{listing.description}</p>
-                  )}
-                  {listing.user_id && (
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-white">{listing.title}</h3>
+                    <p className="text-[11px] capitalize text-gray-500">{listing.type} promo</p>
+                  </div>
+                </div>
+
+                {listing.description && (
+                  <p className="mb-3 line-clamp-2 text-sm text-gray-400">{listing.description}</p>
+                )}
+
+                {/* Publisher row */}
+                {(listing.discord_username || listing.user_id) && (
+                  <div className="mb-3 flex items-center gap-2 border-t border-white/5 pt-3">
+                    {listing.discord_avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={listing.discord_avatar}
+                        alt=""
+                        className="h-7 w-7 rounded-full"
+                      />
+                    ) : (
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-discord-blurple text-[10px] font-bold text-white">
+                        {(listing.discord_username || '?')[0]}
+                      </div>
+                    )}
+                    <span className="truncate text-xs text-gray-400">
+                      {listing.discord_username || 'Publisher'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Action buttons: Open link + Profile check */}
+                <div className="mt-auto flex gap-2 pt-1">
+                  <a
+                    href={listing.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-bold text-white ${
+                      listing.type === 'discord'
+                        ? 'bg-discord-blurple hover:bg-[#4752c4]'
+                        : 'bg-emerald-600 hover:bg-emerald-500'
+                    }`}
+                  >
+                    {listing.type === 'discord' ? (
+                      <>
+                        <Server className="h-3.5 w-3.5" /> Open Discord
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="h-3.5 w-3.5" /> Open Website
+                      </>
+                    )}
+                    <ExternalLink className="h-3 w-3 opacity-80" />
+                  </a>
+
+                  {listing.user_id ? (
                     <Link
                       href={`/u/${listing.user_id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-3 text-xs text-discord-blurple hover:underline"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 py-2.5 text-xs font-bold text-white hover:bg-white/10"
                     >
-                      View publisher profile
+                      <UserCircle2 className="h-3.5 w-3.5" /> Profile check
                     </Link>
+                  ) : (
+                    <span className="flex flex-1 items-center justify-center rounded-lg border border-white/5 py-2.5 text-xs text-gray-600">
+                      No profile
+                    </span>
                   )}
-                </a>
+                </div>
               </div>
             ))}
           </div>
@@ -246,12 +304,12 @@ export default function Home() {
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-discord-dark p-6">
             <div className="mb-4 flex justify-between">
               <h3 className="font-bold text-white">Publish (public)</h3>
-              <button onClick={() => setShowForm(false)}>
+              <button type="button" onClick={() => setShowForm(false)}>
                 <X className="h-5 w-5 text-gray-400" />
               </button>
             </div>
             {success ? (
-              <p className="py-8 text-center text-discord-green">Live for everyone!</p>
+              <p className="py-8 text-center text-discord-green">Live! Card pe link + profile check</p>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
@@ -259,7 +317,9 @@ export default function Home() {
                     type="button"
                     onClick={() => setForm({ ...form, type: 'discord' })}
                     className={`rounded-lg border py-2 text-sm ${
-                      form.type === 'discord' ? 'border-discord-blurple text-discord-blurple' : 'border-white/10 text-gray-400'
+                      form.type === 'discord'
+                        ? 'border-discord-blurple text-discord-blurple'
+                        : 'border-white/10 text-gray-400'
                     }`}
                   >
                     Discord
@@ -268,7 +328,9 @@ export default function Home() {
                     type="button"
                     onClick={() => setForm({ ...form, type: 'website' })}
                     className={`rounded-lg border py-2 text-sm ${
-                      form.type === 'website' ? 'border-emerald-500 text-emerald-400' : 'border-white/10 text-gray-400'
+                      form.type === 'website'
+                        ? 'border-emerald-500 text-emerald-400'
+                        : 'border-white/10 text-gray-400'
                     }`}
                   >
                     Website
@@ -288,7 +350,11 @@ export default function Home() {
                     type="url"
                     value={form.url}
                     onChange={(e) => setForm({ ...form, url: e.target.value })}
-                    placeholder="https://discord.gg/..."
+                    placeholder={
+                      form.type === 'discord'
+                        ? 'https://discord.gg/...'
+                        : 'https://yoursite.com'
+                    }
                     className="w-full rounded-lg border border-white/10 bg-discord-card py-2.5 pl-10 pr-3 text-sm text-white"
                   />
                 </div>
