@@ -3,7 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  realtime: { params: { eventsPerSecond: 10 } },
+});
 
 export type Listing = {
   id: string;
@@ -70,6 +72,7 @@ export function getDiscordProfile(user: {
     (meta.name as string) ||
     (meta.preferred_username as string) ||
     (identityData.full_name as string) ||
+    (identityData.name as string) ||
     user.email?.split('@')[0] ||
     'User';
 
@@ -83,6 +86,7 @@ export function getDiscordProfile(user: {
     (meta.provider_id as string) ||
     discordIdentity?.id ||
     (identityData.sub as string) ||
+    (identityData.provider_id as string) ||
     null;
 
   return {
@@ -95,6 +99,7 @@ export function getDiscordProfile(user: {
   };
 }
 
+/** Create or refresh profile on every login (Discord + email) */
 export async function ensureProfile(user: {
   id: string;
   email?: string;
@@ -102,16 +107,29 @@ export async function ensureProfile(user: {
   identities?: Array<{ provider: string; id: string; identity_data?: Record<string, unknown> }>;
 }) {
   const au = getDiscordProfile(user);
-  await supabase.from('profiles').upsert(
+
+  // Don't wipe custom display_name if user already set one
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('display_name, bio')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const { error } = await supabase.from('profiles').upsert(
     {
       id: user.id,
-      display_name: au.username,
+      display_name: existing?.display_name || au.username,
+      bio: existing?.bio ?? null,
       discord_username: au.username,
       avatar_url: au.avatarUrl,
       discord_id: au.discordId,
       email: user.email || null,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'id', ignoreDuplicates: false }
+    { onConflict: 'id' }
   );
+
+  if (error) {
+    console.error('ensureProfile', error.message);
+  }
 }
