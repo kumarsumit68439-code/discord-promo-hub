@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { supabase, Profile, Listing } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
+import ReportButton from '@/components/ReportButton';
 import { UserPlus, UserMinus, MessageSquare, Users } from 'lucide-react';
 
 export default function UserProfilePage() {
@@ -127,31 +128,34 @@ export default function UserProfilePage() {
           </div>
 
           {user?.id !== id && (
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={toggleFollow}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold ${
-                  isFollowing
-                    ? 'bg-white/10 text-white hover:bg-white/15'
-                    : 'bg-discord-blurple text-white hover:bg-[#4752c4]'
-                }`}
-              >
-                {isFollowing ? (
-                  <>
-                    <UserMinus className="h-4 w-4" /> Unfollow
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="h-4 w-4" /> Follow
-                  </>
-                )}
-              </button>
-              <Link
-                href={`/messages/${id}`}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 py-2.5 text-sm font-semibold text-white hover:bg-white/5"
-              >
-                <MessageSquare className="h-4 w-4" /> Message
-              </Link>
+            <div className="mt-4 space-y-2">
+              <div className="flex gap-2">
+                <button
+                  onClick={toggleFollow}
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold ${
+                    isFollowing
+                      ? 'bg-white/10 text-white hover:bg-white/15'
+                      : 'bg-discord-blurple text-white hover:bg-[#4752c4]'
+                  }`}
+                >
+                  {isFollowing ? (
+                    <>
+                      <UserMinus className="h-4 w-4" /> Unfollow
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="h-4 w-4" /> Follow
+                    </>
+                  )}
+                </button>
+                <Link
+                  href={`/messages/${id}`}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 py-2.5 text-sm font-semibold text-white hover:bg-white/5"
+                >
+                  <MessageSquare className="h-4 w-4" /> Message
+                </Link>
+              </div>
+              <ReportButton targetId={id} />
             </div>
           )}
         </div>
