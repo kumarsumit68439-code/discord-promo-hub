@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
-export default function AuthCallbackClient() {
+function CallbackInner() {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -13,7 +13,6 @@ export default function AuthCallbackClient() {
     const next = params.get('next') || '/';
 
     async function finish() {
-      // Handle ?code= from OAuth redirect
       const url = new URL(window.location.href);
       const code = url.searchParams.get('code');
 
@@ -27,18 +26,17 @@ export default function AuthCallbackClient() {
         return;
       }
 
-      // Hash fragment tokens (implicit) — getSession picks them up
       const { data } = await supabase.auth.getSession();
       if (data.session) {
         router.replace(next);
-      } else {
-        // Wait briefly for onAuthStateChange
-        setTimeout(async () => {
-          const { data: d2 } = await supabase.auth.getSession();
-          if (d2.session) router.replace(next);
-          else router.replace('/login');
-        }, 800);
+        return;
       }
+
+      setTimeout(async () => {
+        const { data: d2 } = await supabase.auth.getSession();
+        if (d2.session) router.replace(next);
+        else router.replace('/login');
+      }, 800);
     }
 
     finish();
@@ -62,5 +60,19 @@ export default function AuthCallbackClient() {
         <p className="text-sm text-gray-400">Logging you in...</p>
       </div>
     </div>
+  );
+}
+
+export default function AuthCallbackClient() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-discord-darker">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-discord-blurple border-t-transparent" />
+        </div>
+      }
+    >
+      <CallbackInner />
+    </Suspense>
   );
 }
