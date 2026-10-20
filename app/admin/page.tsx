@@ -17,9 +17,7 @@ export default function AdminPage() {
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !isAdmin) {
-      router.replace('/');
-    }
+    if (!authLoading && !isAdmin) router.replace('/');
   }, [authLoading, isAdmin, router]);
 
   useEffect(() => {
@@ -39,32 +37,28 @@ export default function AdminPage() {
   async function banUser(id: string, duration: BanDuration, reason: string) {
     setBusy(id);
     const { ban_until, is_permanent_ban } = banUntilFromDuration(duration);
-    await supabase
-      .from('profiles')
-      .update({
-        is_banned: true,
-        is_permanent_ban,
-        ban_until,
-        ban_reason: reason || 'Violation of rules',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id);
+    const { error } = await supabase.rpc('admin_set_ban', {
+      target_id: id,
+      banned: true,
+      permanent: is_permanent_ban,
+      until_ts: ban_until,
+      reason: reason || 'Violation of rules',
+    });
+    if (error) alert(error.message);
     await loadUsers();
     setBusy(null);
   }
 
   async function unbanUser(id: string) {
     setBusy(id);
-    await supabase
-      .from('profiles')
-      .update({
-        is_banned: false,
-        is_permanent_ban: false,
-        ban_until: null,
-        ban_reason: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id);
+    const { error } = await supabase.rpc('admin_set_ban', {
+      target_id: id,
+      banned: false,
+      permanent: false,
+      until_ts: null,
+      reason: null,
+    });
+    if (error) alert(error.message);
     await loadUsers();
     setBusy(null);
   }
@@ -102,7 +96,7 @@ export default function AdminPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">Admin Panel</h1>
-            <p className="text-xs text-gray-400">Ban / unban users · Discord & email accounts</p>
+            <p className="text-xs text-gray-400">Only sumitjilowa34@gmail.com / Discord 1487343086198853785</p>
           </div>
         </div>
 
@@ -121,10 +115,7 @@ export default function AdminPage() {
         ) : (
           <div className="space-y-3">
             {filtered.map((u) => (
-              <div
-                key={u.id}
-                className="rounded-xl border border-white/5 bg-discord-card p-4"
-              >
+              <div key={u.id} className="rounded-xl border border-white/5 bg-discord-card p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex gap-3">
                     {u.avatar_url ? (
@@ -158,38 +149,33 @@ export default function AdminPage() {
                         <button
                           disabled={busy === u.id}
                           onClick={() => unbanUser(u.id)}
-                          className="flex items-center gap-1 rounded-lg bg-discord-green/20 px-3 py-1.5 text-xs font-semibold text-discord-green hover:bg-discord-green/30"
+                          className="flex items-center gap-1 rounded-lg bg-discord-green/20 px-3 py-1.5 text-xs font-semibold text-discord-green"
                         >
                           <Unlock className="h-3.5 w-3.5" /> Unban
                         </button>
                       ) : (
-                        <>
-                          {(['1h', '2h', '24h', 'permanent'] as BanDuration[]).map((d) => (
-                            <button
-                              key={d}
-                              disabled={busy === u.id}
-                              onClick={() => {
-                                const reason =
-                                  prompt(`Ban reason (${d}):`, 'Violation of rules') ||
-                                  'Violation of rules';
-                                banUser(u.id, d, reason);
-                              }}
-                              className="rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/25"
-                            >
-                              <Ban className="mr-1 inline h-3 w-3" />
-                              {d}
-                            </button>
-                          ))}
-                        </>
+                        (['1h', '2h', '24h', 'permanent'] as BanDuration[]).map((d) => (
+                          <button
+                            key={d}
+                            disabled={busy === u.id}
+                            onClick={() => {
+                              const reason =
+                                prompt(`Ban reason (${d}):`, 'Violation of rules') ||
+                                'Violation of rules';
+                              banUser(u.id, d, reason);
+                            }}
+                            className="rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-medium text-red-400"
+                          >
+                            <Ban className="mr-1 inline h-3 w-3" />
+                            {d}
+                          </button>
+                        ))
                       )}
                     </div>
                   )}
                 </div>
               </div>
             ))}
-            {filtered.length === 0 && (
-              <p className="py-8 text-center text-gray-500">No users found</p>
-            )}
           </div>
         )}
       </main>
