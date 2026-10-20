@@ -8,14 +8,14 @@ import SiteHeader from '@/components/SiteHeader';
 import { HeartHandshake } from 'lucide-react';
 
 export default function HelperPanel() {
-  const { isHelper, loading } = useAuth();
+  const { isHelper, isAdmin, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !isHelper) router.replace('/');
-  }, [loading, isHelper, router]);
+    if (!loading && !isHelper && !isAdmin) router.replace('/');
+  }, [loading, isHelper, isAdmin, router]);
 
-  if (loading || !isHelper) {
+  if (loading || (!isHelper && !isAdmin)) {
     return (
       <div className="min-h-screen bg-discord-darker">
         <SiteHeader />
