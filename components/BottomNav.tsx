@@ -18,6 +18,7 @@ export default function BottomNav() {
   const { user, appUser, isAdmin } = useAuth();
 
   if (!user || path === '/login' || path.startsWith('/auth')) return null;
+  // Hide on active chat conversation for more space
   if (path.startsWith('/messages/') && path !== '/messages') return null;
 
   const items = [
@@ -34,8 +35,8 @@ export default function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-discord-dark/95 backdrop-blur-md sm:hidden">
-      <div className="mx-auto flex max-w-lg items-stretch justify-around px-0.5 py-1.5 overflow-x-auto">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-discord-dark/95 backdrop-blur-md">
+      <div className="mx-auto flex max-w-lg items-stretch justify-around px-0.5 py-1.5">
         {items.map(({ href, label, icon: Icon }) => {
           const active =
             href === '/'
@@ -45,7 +46,7 @@ export default function BottomNav() {
             <Link
               key={href + label}
               href={href}
-              className={`flex min-w-[3.2rem] flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium ${
+              className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium ${
                 active ? 'text-discord-blurple' : 'text-gray-500'
               }`}
             >
