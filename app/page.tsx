@@ -119,7 +119,7 @@ export default function Home() {
     { href: '/messages', label: 'Messages', icon: MessagesSquare, desc: 'Realtime chat' },
     { href: '/music', label: 'Music', icon: Music2, desc: 'YouTube player' },
     { href: '/profile', label: 'Profile', icon: User, desc: 'Edit & Discord check' },
-    { href: '/hosting', label: 'Bot Hosting', icon: Bot, desc: 'Welcome, moderation & AI bots' },
+    { href: '/hosting', label: 'Bot Hosting', icon: Bot, desc: 'Welcome, moderation, AI, supporter & invite bots' },
   ];
 
   return (
