@@ -18,6 +18,7 @@ import {
   Star,
   BookOpen,
   ClipboardCheck,
+  Bot,
 } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 
@@ -33,6 +34,7 @@ export default function BottomNav() {
     { href: '/users', label: 'Search', icon: Search },
     { href: '/messages', label: 'Chat', icon: MessagesSquare },
     { href: '/music', label: 'Music', icon: Music2 },
+    { href: '/hosting', label: 'Bots', icon: Bot },
     { href: '/rules', label: 'Rules', icon: BookOpen },
     {
       href: appUser ? `/u/${appUser.id}` : '/profile',
