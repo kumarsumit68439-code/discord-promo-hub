@@ -14,6 +14,15 @@ const GROQ_FREE_CHAT_MODELS = [
   'openai/gpt-oss-20b',
   'qwen/qwen3.8-27b',
 ] as const;
+const GROQ_FREE_TASK_MODELS = [
+  { id: 'openai/gpt-oss-safeguard-20b', task: 'Safety / moderation' },
+  { id: 'meta-llama/llama-prompt-guard-2-22m', task: 'Prompt safety classifier' },
+  { id: 'meta-llama/llama-prompt-guard-2-86m', task: 'Prompt safety classifier' },
+  { id: 'whisper-large-v3', task: 'Audio transcription' },
+  { id: 'whisper-large-v3-turbo', task: 'Audio transcription' },
+  { id: 'canopylabs/orpheus-v1-english', task: 'Text-to-speech' },
+  { id: 'canopylabs/orpheus-arabic-saudi', task: 'Text-to-speech' },
+] as const;
 
 export default function BotProviderSettings() {
   const [provider, setProvider] = useState<Provider>('groq');
@@ -108,8 +117,11 @@ export default function BotProviderSettings() {
           <label className="mb-2 block text-sm text-gray-300">Model</label>
           <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white">
             <option value="">Choose model (optional)</option>
-            {provider === 'groq' && <optgroup label="Groq Free Plan — chat models">
+            {provider === 'groq' && <optgroup label="Groq Free Plan — general chat">
               {freeGroqModels.map((item) => <option key={item} value={item}>{item}</option>)}
+            </optgroup>}
+            {provider === 'groq' && <optgroup label="Groq Free Plan — task-specific (not general chat)">
+              {GROQ_FREE_TASK_MODELS.map((item) => <option key={item.id} value={item.id} disabled>{item.id} — {item.task}</option>)}
             </optgroup>}
             {otherLiveModels.length > 0 && <optgroup label="Other models returned by live API">
               {otherLiveModels.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -125,7 +137,7 @@ export default function BotProviderSettings() {
       </div>
       {message && <p className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-400/10 p-3 text-sm text-emerald-200"><CheckCircle2 className="h-4 w-4 shrink-0" />{message}</p>}
       {error && <p className="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-200">{error}</p>}
-      <p className="mt-4 text-xs leading-5 text-gray-500">Groq's published Free Plan currently lists GPT OSS 120B, GPT OSS 20B and Qwen 3.8 27B for general chat. Other live models are shown separately and may be paid, preview-only, or task-specific. Your account's plan and rate limits apply. <a className="underline text-gray-300" href="https://console.groq.com/docs/rate-limits" target="_blank" rel="noreferrer">Official rate limits</a> · <a className="underline text-gray-300" href="https://console.groq.com/docs/models" target="_blank" rel="noreferrer">Official model catalog</a>.</p>
+      <p className="mt-4 text-xs leading-5 text-gray-500">Groq's published Free Plan lists GPT OSS 120B, GPT OSS 20B and Qwen 3.8 27B for general chat. Free task-specific models (moderation, audio transcription and text-to-speech) are also listed but disabled here because they are not general chat models. Other live models may be paid or preview-only. Your account's plan and rate limits apply. <a className="underline text-gray-300" href="https://console.groq.com/docs/rate-limits" target="_blank" rel="noreferrer">Official rate limits</a> · <a className="underline text-gray-300" href="https://console.groq.com/docs/models" target="_blank" rel="noreferrer">Official model catalog</a>.</p>
     </section>
   );
 }
