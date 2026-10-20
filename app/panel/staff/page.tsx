@@ -10,7 +10,7 @@ import { ROLE_POWERS } from '@/lib/roles';
 import { ClipboardList, Radio } from 'lucide-react';
 
 export default function StaffPanel() {
-  const { isStaff, loading } = useAuth();
+  const { isStaff, isAdmin, loading } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<Profile[]>([]);
   const [listings, setListings] = useState(0);
@@ -18,11 +18,11 @@ export default function StaffPanel() {
   const [live, setLive] = useState(false);
 
   useEffect(() => {
-    if (!loading && !isStaff) router.replace('/');
-  }, [loading, isStaff, router]);
+    if (!loading && !isStaff && !isAdmin) router.replace('/');
+  }, [loading, isStaff, isAdmin, router]);
 
   useEffect(() => {
-    if (!isStaff) return;
+    if (!isStaff && !isAdmin) return;
     (async () => {
       const [{ data: ps }, { count: lc }, { count: rc }] = await Promise.all([
         supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(30),
@@ -48,9 +48,9 @@ export default function StaffPanel() {
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [isStaff]);
+  }, [isStaff, isAdmin]);
 
-  if (loading || !isStaff) {
+  if (loading || (!isStaff && !isAdmin)) {
     return (
       <div className="min-h-screen bg-discord-darker">
         <SiteHeader />
