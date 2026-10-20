@@ -10,19 +10,21 @@ import { ROLE_POWERS } from '@/lib/roles';
 import { Star, Lock, Unlock, Shield } from 'lucide-react';
 
 export default function ActingOwnerPanel() {
-  const { role, isActingOwner, isOwner, loading, appLocked, refreshProfile } = useAuth();
+  const { role, isOwner, isAdmin, loading, appLocked, refreshProfile } = useAuth();
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Only acting_owner role (real owner uses /panel/owner)
-  const allowed = role === 'acting_owner' || isOwner;
+  // Admin+ can open this panel; only acting_owner / owner can use App Lock
+  const allowed = role === 'acting_owner' || isOwner || isAdmin;
+  const canLock = role === 'acting_owner' || isOwner;
 
   useEffect(() => {
     if (!loading && !allowed) router.replace('/');
   }, [loading, allowed, router]);
 
   async function toggleLock() {
+    if (!canLock) return;
     setBusy(true);
     const next = !appLocked;
     const { error } = await supabase.rpc('set_app_lock', {
@@ -38,7 +40,7 @@ export default function ActingOwnerPanel() {
     return (
       <div className="min-h-screen bg-discord-darker">
         <SiteHeader />
-        <p className="py-20 text-center text-gray-400">Acting Owner only</p>
+        <p className="py-20 text-center text-gray-400">Acting Owner / Admin only</p>
       </div>
     );
   }
@@ -68,26 +70,28 @@ export default function ActingOwnerPanel() {
 
         {msg && <p className="mb-3 text-sm text-gray-300">{msg}</p>}
 
-        <div className="mb-6 rounded-xl border border-orange-500/30 bg-orange-500/10 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold text-white">App Lock</p>
-              <p className="text-xs text-gray-400">
-                {appLocked ? 'LOCKED for normal users' : 'Site open'}
-              </p>
+        {canLock && (
+          <div className="mb-6 rounded-xl border border-orange-500/30 bg-orange-500/10 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-white">App Lock</p>
+                <p className="text-xs text-gray-400">
+                  {appLocked ? 'LOCKED for normal users' : 'Site open'}
+                </p>
+              </div>
+              <button
+                disabled={busy}
+                onClick={toggleLock}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold ${
+                  appLocked ? 'bg-discord-green/20 text-discord-green' : 'bg-red-500/20 text-red-400'
+                }`}
+              >
+                {appLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                {appLocked ? 'Unlock' : 'Lock'}
+              </button>
             </div>
-            <button
-              disabled={busy}
-              onClick={toggleLock}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold ${
-                appLocked ? 'bg-discord-green/20 text-discord-green' : 'bg-red-500/20 text-red-400'
-              }`}
-            >
-              {appLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-              {appLocked ? 'Unlock' : 'Lock'}
-            </button>
           </div>
-        </div>
+        )}
 
         <Link href="/admin" className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
           <Shield className="h-5 w-5 text-amber-400" />
