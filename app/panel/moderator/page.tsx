@@ -9,24 +9,24 @@ import { banUntilFromDuration, BanDuration } from '@/lib/admin';
 import { Wrench, Ban, Unlock } from 'lucide-react';
 
 export default function ModeratorPanel() {
-  const { isModerator, loading, user } = useAuth();
+  const { isModerator, isAdmin, loading, user } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<Profile[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loading && !isModerator) router.replace('/');
-  }, [loading, isModerator, router]);
+    if (!loading && !isModerator && !isAdmin) router.replace('/');
+  }, [loading, isModerator, isAdmin, router]);
 
   useEffect(() => {
-    if (!isModerator) return;
+    if (!isModerator && !isAdmin) return;
     supabase
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(50)
       .then(({ data }) => setUsers(data || []));
-  }, [isModerator]);
+  }, [isModerator, isAdmin]);
 
   async function ban(id: string, d: BanDuration) {
     const { ban_until, is_permanent_ban } = banUntilFromDuration(d);
@@ -59,7 +59,7 @@ export default function ModeratorPanel() {
     setUsers(data || []);
   }
 
-  if (loading || !isModerator) {
+  if (loading || (!isModerator && !isAdmin)) {
     return (
       <div className="min-h-screen bg-discord-darker">
         <SiteHeader />
