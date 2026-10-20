@@ -1,15 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { supabase, Profile } from '@/lib/supabase';
-import { useAuth } from '@/components/AuthProvider';
-import SiteHeader from '@/components/SiteHeader';
-import { BanDuration, banUntilFromDuration, isProtectedAccount } from '@/lib/admin';
-import { ROLE_LABEL, ROLE_COLOR, SiteRole } from '@/lib/roles';
-import { BADGE_OPTIONS, badgeEmoji } from '@/lib/badges';
-import { Shield, Ban, Unlock, Search, CheckCircle2 } from 'lucide-react';
+const PANEL_LINKS = [
+  { href: '/panel/staff', label: 'Staff Panel', color: 'bg-sky-500/15 text-sky-300' },
+  { href: '/panel/helper', label: 'Helper Panel', color: 'bg-emerald-500/15 text-emerald-300' },
+  { href: '/panel/developer', label: 'Developer Panel', color: 'bg-cyan-500/15 text-cyan-300' },
+  { href: '/panel/moderator', label: 'Moderator Panel', color: 'bg-violet-500/15 text-violet-300' },
+  { href: '/panel/acting-owner', label: 'Acting Owner Panel', color: 'bg-orange-500/15 text-orange-300' },
+];
 
 const ASSIGNABLE: SiteRole[] = [
   'user',
