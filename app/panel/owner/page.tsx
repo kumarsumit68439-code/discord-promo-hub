@@ -6,13 +6,15 @@ import Link from 'next/link';
 import { supabase, Profile } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
-import { ROLE_LABEL, ROLE_COLOR, SiteRole } from '@/lib/roles';
-import { Crown, Shield, Users } from 'lucide-react';
+import { ROLE_LABEL, ROLE_COLOR, ROLE_POWERS, SiteRole } from '@/lib/roles';
+import { Crown, Shield, Lock, Unlock, Trash2 } from 'lucide-react';
 
 export default function OwnerPanel() {
-  const { isOwner, loading, role } = useAuth();
+  const { isOwner, loading, role, appLocked, appLockMessage, refreshProfile } = useAuth();
   const router = useRouter();
   const [staff, setStaff] = useState<Profile[]>([]);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!loading && !isOwner) router.replace('/');
@@ -23,9 +25,31 @@ export default function OwnerPanel() {
     supabase
       .from('profiles')
       .select('*')
-      .in('role', ['owner', 'admin', 'moderator', 'developer', 'helper'])
+      .neq('role', 'user')
       .then(({ data }) => setStaff(data || []));
   }, [isOwner]);
+
+  async function toggleLock() {
+    setBusy(true);
+    const next = !appLocked;
+    const { error } = await supabase.rpc('set_app_lock', {
+      locked: next,
+      msg: next ? 'Site locked by Owner — only staff can enter' : null,
+    });
+    setMsg(error ? error.message : next ? 'App LOCKED for normal users' : 'App UNLOCKED');
+    await refreshProfile();
+    setBusy(false);
+  }
+
+  async function deleteAccount(id: string) {
+    if (!window.confirm('Delete this account permanently (soft delete)?')) return;
+    setBusy(true);
+    const { error } = await supabase.rpc('owner_delete_account', { target_id: id });
+    setMsg(error ? error.message : 'Account deleted');
+    const { data } = await supabase.from('profiles').select('*').neq('role', 'user');
+    setStaff(data || []);
+    setBusy(false);
+  }
 
   if (loading || !isOwner) {
     return (
@@ -46,29 +70,63 @@ export default function OwnerPanel() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">Owner Panel</h1>
-            <p className="text-xs text-gray-400">Max 2 owners · full control</p>
+            <p className="text-xs text-gray-400">Full website control</p>
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-white/10 bg-discord-card p-4">
+          <p className="mb-2 text-xs font-semibold uppercase text-gray-500">Your powers</p>
+          <ul className="space-y-1 text-sm text-gray-300">
+            {ROLE_POWERS.owner.map((p) => (
+              <li key={p}>• {p}</li>
+            ))}
+          </ul>
+        </div>
+
+        {msg && <p className="mb-3 text-sm text-gray-300">{msg}</p>}
+
+        {/* App lock */}
+        <div className="mb-6 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-white">App Lock</p>
+              <p className="text-xs text-gray-400">
+                {appLocked
+                  ? 'LOCKED — normal users blocked · staff/admin still in'
+                  : 'Unlocked — everyone can use the site'}
+              </p>
+            </div>
+            <button
+              disabled={busy}
+              onClick={toggleLock}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold ${
+                appLocked
+                  ? 'bg-discord-green/20 text-discord-green'
+                  : 'bg-red-500/20 text-red-400'
+              }`}
+            >
+              {appLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+              {appLocked ? 'Unlock' : 'Lock site'}
+            </button>
           </div>
         </div>
 
         <div className="mb-6 grid gap-3 sm:grid-cols-2">
-          <Link
-            href="/admin"
-            className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"
-          >
+          <Link href="/admin" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
             <Shield className="mb-2 h-5 w-5 text-amber-400" />
             <p className="font-semibold text-white">Admin Panel</p>
             <p className="text-xs text-gray-400">Ban · roles · users</p>
           </Link>
-          <div className="rounded-xl border border-white/10 bg-discord-card p-4">
-            <Users className="mb-2 h-5 w-5 text-gray-400" />
-            <p className="font-semibold text-white">Your role</p>
-            <p className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-bold ${ROLE_COLOR[role]}`}>
-              {ROLE_LABEL[role]}
-            </p>
-          </div>
+          <Link
+            href="/panel/reports"
+            className="rounded-xl border border-white/10 bg-discord-card p-4"
+          >
+            <p className="font-semibold text-white">Reports</p>
+            <p className="text-xs text-gray-400">User reports queue</p>
+          </Link>
         </div>
 
-        <h2 className="mb-3 text-sm font-semibold text-gray-300">Staff & roles</h2>
+        <h2 className="mb-3 text-sm font-semibold text-gray-300">Staff · delete account</h2>
         <div className="space-y-2">
           {staff.map((u) => {
             const r = (u.role as SiteRole) || 'user';
@@ -77,27 +135,25 @@ export default function OwnerPanel() {
                 key={u.id}
                 className="flex items-center gap-3 rounded-xl border border-white/5 bg-discord-card p-3"
               >
-                {u.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={u.avatar_url} alt="" className="h-10 w-10 rounded-full" />
-                ) : (
-                  <div className="h-10 w-10 rounded-full bg-discord-blurple" />
-                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-white">
-                    {u.display_name || u.discord_username || 'User'}
+                    {u.display_name || 'User'}
                   </p>
-                  <p className="truncate text-xs text-gray-500">{u.email}</p>
+                  <span className={`text-[10px] font-bold ${ROLE_COLOR[r]}`}>
+                    {ROLE_LABEL[r]}
+                  </span>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[r]}`}>
-                  {ROLE_LABEL[r]}
-                </span>
+                <button
+                  disabled={busy}
+                  onClick={() => deleteAccount(u.id)}
+                  className="rounded-lg p-2 text-red-400 hover:bg-red-500/10"
+                  title="Delete account"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             );
           })}
-          {staff.length === 0 && (
-            <p className="text-sm text-gray-500">No staff yet — assign roles in Admin Panel</p>
-          )}
         </div>
       </main>
     </div>

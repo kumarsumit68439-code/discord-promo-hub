@@ -17,7 +17,7 @@ import {
   Profile,
 } from '@/lib/supabase';
 import { isOwnerBootstrap, isCurrentlyBanned } from '@/lib/admin';
-import { hasMinRole, SiteRole } from '@/lib/roles';
+import { SiteRole, isStaffLike } from '@/lib/roles';
 import BanScreen from './BanScreen';
 
 type AuthCtx = {
@@ -27,9 +27,14 @@ type AuthCtx = {
   role: SiteRole;
   isAdmin: boolean;
   isOwner: boolean;
+  isActingOwner: boolean;
   isModerator: boolean;
   isDeveloper: boolean;
   isHelper: boolean;
+  isStaff: boolean;
+  isStaffLike: boolean;
+  appLocked: boolean;
+  appLockMessage: string;
   loading: boolean;
   refreshProfile: () => Promise<void>;
   signInDiscord: () => Promise<void>;
@@ -42,6 +47,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [appLocked, setAppLocked] = useState(false);
+  const [appLockMessage, setAppLockMessage] = useState('');
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async (u: User) => {
@@ -51,7 +58,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
     setProfile(data || null);
 
-    // Bootstrap owner role in DB if needed
     if (
       data &&
       data.role !== 'owner' &&
@@ -63,12 +69,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadAppLock = useCallback(async () => {
+    const { data } = await supabase.from('site_settings').select('value').eq('key', 'app_lock').maybeSingle();
+    const v = data?.value as { locked?: boolean; message?: string } | null;
+    setAppLocked(!!v?.locked);
+    setAppLockMessage(v?.message || 'Site is temporarily locked by Owner');
+  }, []);
+
   const refreshProfile = useCallback(async () => {
     if (!user) return;
     await loadProfile(user);
-  }, [user, loadProfile]);
+    await loadAppLock();
+  }, [user, loadProfile, loadAppLock]);
 
   useEffect(() => {
+    loadAppLock();
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const u = session?.user ?? null;
       setUser(u);
@@ -94,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [loadProfile]);
+  }, [loadProfile, loadAppLock]);
 
   async function signInDiscord() {
     await supabase.auth.signInWithOAuth({
@@ -119,17 +134,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     discordId: appUser?.discordId || profile?.discord_id,
   });
 
-  const role: SiteRole = bootstrapOwner
-    ? 'owner'
-    : ((profile?.role as SiteRole) || 'user');
+  const role: SiteRole = bootstrapOwner ? 'owner' : ((profile?.role as SiteRole) || 'user');
 
-  const isOwner = hasMinRole(role, 'owner');
-  const isAdmin = hasMinRole(role, 'admin');
-  const isModerator = hasMinRole(role, 'moderator');
-  const isDeveloper = hasMinRole(role, 'developer');
-  const isHelper = hasMinRole(role, 'helper');
+  const isOwner = role === 'owner';
+  const isActingOwner = role === 'acting_owner' || role === 'owner';
+  const isAdmin = ['admin', 'acting_owner', 'owner'].includes(role);
+  const isModerator = ['moderator', 'admin', 'acting_owner', 'owner'].includes(role);
+  const isDeveloper = ['developer', 'moderator', 'admin', 'acting_owner', 'owner'].includes(role);
+  const isHelper = ['helper', 'developer', 'moderator', 'admin', 'acting_owner', 'owner'].includes(role);
+  const isStaff = ['staff', 'helper', 'developer', 'moderator', 'admin', 'acting_owner', 'owner'].includes(role);
+  const staffLike = isStaffLike(role);
 
   const banned = profile ? isCurrentlyBanned(profile) : false;
+
+  // App lock: block normal users only — staff+ can still use site
+  const blockedByLock = appLocked && user && !staffLike;
 
   return (
     <Ctx.Provider
@@ -140,9 +159,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role,
         isAdmin,
         isOwner,
+        isActingOwner,
         isModerator,
         isDeveloper,
         isHelper,
+        isStaff,
+        isStaffLike: staffLike,
+        appLocked,
+        appLockMessage,
         loading,
         refreshProfile,
         signInDiscord,
@@ -163,6 +187,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             window.location.href = '/login';
           }}
         />
+      ) : blockedByLock ? (
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#111214] px-6 text-center">
+          <p className="text-2xl font-bold text-white">🔒 Site Locked</p>
+          <p className="max-w-md text-sm text-gray-400">{appLockMessage}</p>
+          <p className="text-xs text-gray-600">Only staff / admin / owner can access right now</p>
+          <button
+            onClick={signOut}
+            className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white"
+          >
+            Logout
+          </button>
+        </div>
       ) : (
         children
       )}
