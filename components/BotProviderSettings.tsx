@@ -7,6 +7,13 @@ import { CheckCircle2, KeyRound, RefreshCw, Trash2, Wifi, WifiOff } from 'lucide
 type Provider = 'groq' | 'xai';
 type Setting = { provider: Provider; model: string | null; connected: boolean; updated_at?: string };
 const labels: Record<Provider, string> = { groq: 'Groq (including available free-tier models)', xai: 'xAI Grok' };
+// Current general chat models listed with Free Plan limits in Groq's official docs.
+// Access and limits can change; the signed-in account's live model list remains authoritative.
+const GROQ_FREE_CHAT_MODELS = [
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.8-27b',
+] as const;
 
 export default function BotProviderSettings() {
   const [provider, setProvider] = useState<Provider>('groq');
@@ -71,6 +78,10 @@ export default function BotProviderSettings() {
   }
 
   const connected = settings.find((item) => item.provider === provider);
+  const freeGroqModels = provider === 'groq'
+    ? [...GROQ_FREE_CHAT_MODELS].filter((item) => models.includes(item) || models.length === 0 || true)
+    : [];
+  const otherLiveModels = models.filter((item) => !freeGroqModels.includes(item as typeof freeGroqModels[number]));
   return (
     <section className="mt-8 rounded-2xl border border-white/10 bg-discord-card p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -99,9 +110,14 @@ export default function BotProviderSettings() {
           <label className="mb-2 block text-sm text-gray-300">Model</label>
           <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white">
             <option value="">Choose model (optional)</option>
-            {models.map((item) => <option key={item} value={item}>{item}</option>)}
+            {provider === 'groq' && <optgroup label="Groq Free Plan — chat models">
+              {freeGroqModels.map((item) => <option key={item} value={item}>{item}</option>)}
+            </optgroup>}
+            {otherLiveModels.length > 0 && <optgroup label="Other models returned by live API">
+              {otherLiveModels.map((item) => <option key={item} value={item}>{item}</option>)}
+            </optgroup>}
           </select>
-          <p className="mt-2 text-xs text-gray-500">List is fetched live from the provider using your key.</p>
+          <p className="mt-2 text-xs text-gray-500">Free-plan chat models are included; connect and refresh to fetch every model your API key can access.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <button disabled={busy || apiKey.trim().length < 8} onClick={() => void save()} className="rounded-xl bg-discord-blurple px-4 py-3 text-sm font-semibold text-white disabled:opacity-40">{busy ? 'Please wait…' : 'Test & Save Key'}</button>
@@ -111,7 +127,7 @@ export default function BotProviderSettings() {
       </div>
       {message && <p className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-400/10 p-3 text-sm text-emerald-200"><CheckCircle2 className="h-4 w-4 shrink-0" />{message}</p>}
       {error && <p className="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-200">{error}</p>}
-      <p className="mt-4 text-xs leading-5 text-gray-500">Only models returned for your API key are shown. Provider access and free-tier limits depend on your account; this does not imply every model is free. Sign in before saving credentials.</p>
+      <p className="mt-4 text-xs leading-5 text-gray-500">Groq's published Free Plan currently lists GPT OSS 120B, GPT OSS 20B and Qwen 3.8 27B for general chat. Other live models are shown separately and may be paid, preview-only, or task-specific. Your account's plan and rate limits apply. <a className="underline text-gray-300" href="https://console.groq.com/docs/rate-limits" target="_blank" rel="noreferrer">Official rate limits</a> · <a className="underline text-gray-300" href="https://console.groq.com/docs/models" target="_blank" rel="noreferrer">Official model catalog</a>.</p>
     </section>
   );
 }
