@@ -3,6 +3,7 @@ import './globals.css';
 import { MusicPlayerProvider } from '@/components/MusicPlayerContext';
 import MiniPlayer from '@/components/MiniPlayer';
 import { AuthProvider } from '@/components/AuthProvider';
+import BottomNav from '@/components/BottomNav';
 
 export const metadata: Metadata = {
   title: 'Discord Promo Hub',
@@ -20,6 +21,7 @@ export default function RootLayout({
         <AuthProvider>
           <MusicPlayerProvider>
             {children}
+            <BottomNav />
             <MiniPlayer />
           </MusicPlayerProvider>
         </AuthProvider>
