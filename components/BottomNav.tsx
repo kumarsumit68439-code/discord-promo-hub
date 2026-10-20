@@ -16,6 +16,8 @@ import {
   Flag,
   ClipboardList,
   Star,
+  BookOpen,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 
@@ -42,6 +44,7 @@ export default function BottomNav() {
     { href: '/users', label: 'Search', icon: Search },
     { href: '/messages', label: 'Chat', icon: MessagesSquare },
     { href: '/music', label: 'Music', icon: Music2 },
+    { href: '/rules', label: 'Rules', icon: BookOpen },
     {
       href: appUser ? `/u/${appUser.id}` : '/profile',
       label: 'Profile',
@@ -49,7 +52,10 @@ export default function BottomNav() {
     },
   ];
 
-  if (isStaffLike) items.push({ href: '/panel/reports', label: 'Reports', icon: Flag });
+  if (isStaffLike) {
+    items.push({ href: '/panel/applications', label: 'Apply✓', icon: ClipboardCheck });
+    items.push({ href: '/panel/reports', label: 'Reports', icon: Flag });
+  }
   if (isStaff) items.push({ href: '/panel/staff', label: 'Staff', icon: ClipboardList });
   if (isHelper) items.push({ href: '/panel/helper', label: 'Helper', icon: HeartHandshake });
   if (isDeveloper) items.push({ href: '/panel/developer', label: 'Dev', icon: Code2 });
