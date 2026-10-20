@@ -59,3 +59,14 @@ export function isCurrentlyBanned(p: {
   if (!p.ban_until) return true;
   return new Date(p.ban_until).getTime() > Date.now();
 }
+
+export function banLabel(p: {
+  is_permanent_ban?: boolean | null;
+  ban_until?: string | null;
+}): string {
+  if (p.is_permanent_ban) return 'permanently';
+  if (p.ban_until) {
+    return `until ${new Date(p.ban_until).toLocaleString()}`;
+  }
+  return 'temporarily';
+}
