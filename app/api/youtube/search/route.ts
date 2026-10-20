@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim();
   const maxResults = Math.min(Number(req.nextUrl.searchParams.get('max') || 12), 25);
@@ -8,10 +11,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing query q' }, { status: 400 });
   }
 
-  const key = process.env.YOUTUBE_API_KEY;
+  const key =
+    process.env.YOUTUBE_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.YT_API_KEY ||
+    '';
+
   if (!key) {
     return NextResponse.json(
-      { error: 'YOUTUBE_API_KEY not configured on server' },
+      {
+        error:
+          'YOUTUBE_API_KEY not configured on server. Set it in Vercel → Project → Settings → Environment Variables, then Redeploy.',
+      },
       { status: 503 }
     );
   }
@@ -24,7 +35,7 @@ export async function GET(req: NextRequest) {
   url.searchParams.set('key', key);
 
   try {
-    const res = await fetch(url.toString(), { next: { revalidate: 60 } });
+    const res = await fetch(url.toString(), { cache: 'no-store' });
     const data = await res.json();
 
     if (!res.ok) {
