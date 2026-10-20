@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { useMusicPlayer } from './MusicPlayerContext';
 
+const SHELL_ID = 'yt-player-shell';
+
 function fmt(s: number) {
   if (!Number.isFinite(s) || s < 0) return '0:00';
   const m = Math.floor(s / 60);
@@ -19,49 +21,55 @@ function fmt(s: number) {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-function hideHost(hostId: string) {
-  const host = document.getElementById(hostId);
-  if (!host) return;
-  host.style.position = 'fixed';
-  host.style.left = '-9999px';
-  host.style.top = '0';
-  host.style.width = '320px';
-  host.style.height = '180px';
-  host.style.opacity = '0';
-  host.style.pointerEvents = 'none';
-  host.style.zIndex = '0';
-  host.style.visibility = 'hidden';
-  const iframe = host.querySelector('iframe');
-  if (iframe) {
-    iframe.style.width = '320px';
-    iframe.style.height = '180px';
-  }
-}
+function applyShell(mode: 'hidden' | 'fullscreen', stage?: HTMLElement | null) {
+  const shell = document.getElementById(SHELL_ID);
+  if (!shell) return;
 
-function showHostOverStage(
-  hostId: string,
-  stage: HTMLElement,
-  resizePlayer: (w: number, h: number) => void
-) {
-  const host = document.getElementById(hostId);
-  if (!host) return;
-  const r = stage.getBoundingClientRect();
-  host.style.position = 'fixed';
-  host.style.left = `${r.left}px`;
-  host.style.top = `${r.top}px`;
-  host.style.width = `${r.width}px`;
-  host.style.height = `${r.height}px`;
-  host.style.opacity = '1';
-  host.style.visibility = 'visible';
-  host.style.pointerEvents = 'auto';
-  host.style.zIndex = '110';
-  host.style.background = '#000';
-  resizePlayer(r.width, r.height);
-  const iframe = host.querySelector('iframe');
-  if (iframe) {
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
+  if (mode === 'hidden') {
+    shell.style.cssText = [
+      'position:fixed',
+      'left:-10000px',
+      'top:0',
+      'width:320px',
+      'height:180px',
+      'opacity:0',
+      'visibility:hidden',
+      'pointer-events:none',
+      'z-index:0',
+      'overflow:hidden',
+      'clip:rect(0,0,0,0)',
+    ].join(';');
+    return;
   }
+
+  // fullscreen over stage
+  if (stage) {
+    const r = stage.getBoundingClientRect();
+    shell.style.cssText = [
+      'position:fixed',
+      `left:${r.left}px`,
+      `top:${r.top}px`,
+      `width:${r.width}px`,
+      `height:${r.height}px`,
+      'opacity:1',
+      'visibility:visible',
+      'pointer-events:auto',
+      'z-index:110',
+      'background:#000',
+      'overflow:hidden',
+    ].join(';');
+  }
+
+  // force iframes inside to fill shell
+  shell.querySelectorAll('iframe').forEach((f) => {
+    const el = f as HTMLIFrameElement;
+    el.style.width = '100%';
+    el.style.height = '100%';
+    el.style.position = 'absolute';
+    el.style.left = '0';
+    el.style.top = '0';
+    el.style.border = '0';
+  });
 }
 
 export default function MiniPlayer() {
@@ -85,52 +93,48 @@ export default function MiniPlayer() {
   const stageRef = useRef<HTMLDivElement>(null);
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 
-  // Host visibility by mode
   useEffect(() => {
-    if (!current) {
-      hideHost(playerHostId);
-      return;
-    }
-
-    if (!isFullscreen) {
-      // Mini = audio only, video hidden off-screen (YT still plays)
-      hideHost(playerHostId);
-      resizePlayer(320, 180);
+    if (!current || !isFullscreen) {
+      applyShell('hidden');
+      if (current) resizePlayer(320, 180);
       return;
     }
 
     const place = () => {
+      applyShell('fullscreen', stageRef.current);
       const stage = stageRef.current;
-      if (stage) showHostOverStage(playerHostId, stage, resizePlayer);
+      if (stage) {
+        const r = stage.getBoundingClientRect();
+        resizePlayer(r.width, r.height);
+      }
     };
     place();
-    const t1 = setTimeout(place, 50);
-    const t2 = setTimeout(place, 250);
+    const a = setTimeout(place, 80);
+    const b = setTimeout(place, 300);
     window.addEventListener('resize', place);
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
+      clearTimeout(a);
+      clearTimeout(b);
       window.removeEventListener('resize', place);
     };
-  }, [current, isFullscreen, playerHostId, resizePlayer]);
+  }, [current, isFullscreen, resizePlayer]);
 
-  // Always mount host node for YT API
+  function handleMini() {
+    applyShell('hidden');
+    setFullscreen(false);
+  }
+
+  function handleStop() {
+    applyShell('hidden');
+    stop();
+  }
+
   return (
     <>
-      <div
-        id={playerHostId}
-        style={{
-          position: 'fixed',
-          left: -9999,
-          top: 0,
-          width: 320,
-          height: 180,
-          opacity: 0,
-          visibility: 'hidden',
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-      />
+      {/* Shell wraps YT host so we can hide the whole iframe tree */}
+      <div id={SHELL_ID} style={{ position: 'fixed', left: -10000, top: 0, width: 320, height: 180, opacity: 0, visibility: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+        <div id={playerHostId} style={{ width: '100%', height: '100%' }} />
+      </div>
 
       {!current ? null : isFullscreen ? (
         <div className="fixed inset-0 z-[100] flex flex-col bg-black">
@@ -141,22 +145,12 @@ export default function MiniPlayer() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                hideHost(playerHostId);
-                setFullscreen(false);
-              }}
+              onClick={handleMini}
               className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white/15 px-3 py-2 text-xs font-semibold text-white"
             >
               <Minimize2 className="h-4 w-4" /> Mini
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                hideHost(playerHostId);
-                stop();
-              }}
-              className="shrink-0 rounded-lg p-2 text-gray-400 hover:text-red-400"
-            >
+            <button type="button" onClick={handleStop} className="shrink-0 rounded-lg p-2 text-gray-400 hover:text-red-400">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -247,19 +241,10 @@ export default function MiniPlayer() {
               type="button"
               onClick={() => setFullscreen(true)}
               className="rounded-lg p-2 text-gray-400 hover:text-white"
-              title="Full screen video"
             >
               <Maximize2 className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                hideHost(playerHostId);
-                stop();
-              }}
-              className="rounded-lg p-2 text-gray-400 hover:text-red-400"
-              title="Stop"
-            >
+            <button type="button" onClick={handleStop} className="rounded-lg p-2 text-gray-400 hover:text-red-400">
               <X className="h-4 w-4" />
             </button>
           </div>
