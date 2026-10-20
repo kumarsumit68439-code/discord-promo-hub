@@ -25,10 +25,15 @@ export default function BotHostingPage() {
 
   const inviteUrl = useMemo(() => {
     if (!/^\d{15,22}$/.test(clientId.trim())) return '';
-    const permissions = '274877975552'; // Send messages, embeds, view channels, moderate members, ban members (review in Discord before installing)
+    // Discord permission bitfield: request only what the selected modules need.
+    let permissions = 1024n | 2048n | 16384n | 65536n; // View Channel, Send Messages, Embed Links, Read Message History
+    if (selected.includes('moderation')) permissions |= 1099511627776n; // Moderate Members
+    if (selected.includes('ban')) permissions |= 4n; // Ban Members
+    if (selected.includes('supporter') || process.env.NEXT_PUBLIC_UNUSED) permissions |= 268435456n; // Manage Roles
+    if (selected.includes('invite')) permissions |= 32n; // Manage Guild (invite tracking)
     return 'https://discord.com/oauth2/authorize?client_id=' + encodeURIComponent(clientId.trim()) +
-      '&scope=bot%20applications.commands&permissions=' + permissions;
-  }, [clientId]);
+      '&scope=bot%20applications.commands&permissions=' + permissions.toString();
+  }, [clientId, selected]);
 
   async function copyInvite() {
     if (!inviteUrl) return;
