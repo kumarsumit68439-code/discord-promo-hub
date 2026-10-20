@@ -7,7 +7,9 @@ import { supabase, Profile, Listing } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
 import ReportButton from '@/components/ReportButton';
-import { UserPlus, UserMinus, MessageSquare, Users } from 'lucide-react';
+import { badgeEmoji, badgeLabel } from '@/lib/badges';
+import { ROLE_LABEL, ROLE_COLOR, SiteRole } from '@/lib/roles';
+import { UserPlus, UserMinus, MessageSquare, Users, CheckCircle2 } from 'lucide-react';
 
 export default function UserProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -31,20 +33,13 @@ export default function UserProfilePage() {
           .eq('user_id', id)
           .eq('is_active', true)
           .order('created_at', { ascending: false }),
-        supabase
-          .from('follows')
-          .select('*', { count: 'exact', head: true })
-          .eq('following_id', id),
-        supabase
-          .from('follows')
-          .select('*', { count: 'exact', head: true })
-          .eq('follower_id', id),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', id),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', id),
       ]);
       setProfile(p);
       setListings(ls || []);
       setFollowers(fc || 0);
       setFollowing(fg || 0);
-
       if (user) {
         const { data: f } = await supabase
           .from('follows')
@@ -65,11 +60,7 @@ export default function UserProfilePage() {
     }
     if (user.id === id) return;
     if (isFollowing) {
-      await supabase
-        .from('follows')
-        .delete()
-        .eq('follower_id', user.id)
-        .eq('following_id', id);
+      await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', id);
       setIsFollowing(false);
       setFollowers((n) => Math.max(0, n - 1));
     } else {
@@ -98,6 +89,8 @@ export default function UserProfilePage() {
   }
 
   const name = profile.display_name || profile.discord_username || 'User';
+  const uRole = (profile.role as SiteRole) || 'user';
+  const badges = profile.badges || [];
 
   return (
     <div className="min-h-screen bg-discord-darker pb-24">
@@ -114,8 +107,27 @@ export default function UserProfilePage() {
               </div>
             )}
             <div className="flex-1">
-              <h1 className="text-xl font-bold text-white">{name}</h1>
-              {profile.bio && <p className="mt-1 text-sm text-gray-400">{profile.bio}</p>}
+              <h1 className="flex flex-wrap items-center gap-1.5 text-xl font-bold text-white">
+                {name}
+                {profile.is_verified && (
+                  <CheckCircle2 className="h-5 w-5 text-sky-400" aria-label="Verified" />
+                )}
+              </h1>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[uRole]}`}>
+                  {ROLE_LABEL[uRole]}
+                </span>
+                {badges.map((b) => (
+                  <span
+                    key={b}
+                    title={badgeLabel(b)}
+                    className="rounded-full bg-white/5 px-1.5 py-0.5 text-sm"
+                  >
+                    {badgeEmoji(b)}
+                  </span>
+                ))}
+              </div>
+              {profile.bio && <p className="mt-2 text-sm text-gray-400">{profile.bio}</p>}
               <div className="mt-3 flex gap-4 text-sm">
                 <Link href={`/u/${id}/followers`} className="text-gray-300 hover:text-white">
                   <strong className="text-white">{followers}</strong> followers
@@ -134,8 +146,8 @@ export default function UserProfilePage() {
                   onClick={toggleFollow}
                   className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold ${
                     isFollowing
-                      ? 'bg-white/10 text-white hover:bg-white/15'
-                      : 'bg-discord-blurple text-white hover:bg-[#4752c4]'
+                      ? 'bg-white/10 text-white'
+                      : 'bg-discord-blurple text-white'
                   }`}
                 >
                   {isFollowing ? (
@@ -150,7 +162,7 @@ export default function UserProfilePage() {
                 </button>
                 <Link
                   href={`/messages/${id}`}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 py-2.5 text-sm font-semibold text-white hover:bg-white/5"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 py-2.5 text-sm font-semibold text-white"
                 >
                   <MessageSquare className="h-4 w-4" /> Message
                 </Link>
@@ -173,7 +185,7 @@ export default function UserProfilePage() {
                 href={l.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block rounded-xl border border-white/5 bg-discord-card p-4 hover:border-discord-blurple/30"
+                className="block rounded-xl border border-white/5 bg-discord-card p-4"
               >
                 <p className="font-medium text-white">{l.title}</p>
                 <p className="text-xs text-gray-400">{l.type}</p>

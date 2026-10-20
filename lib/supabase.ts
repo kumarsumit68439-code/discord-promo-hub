@@ -32,6 +32,8 @@ export type Profile = {
   avatar_url: string | null;
   email: string | null;
   role?: SiteRole | string | null;
+  badges?: string[] | null;
+  is_verified?: boolean | null;
   is_banned: boolean | null;
   is_permanent_ban: boolean | null;
   ban_until: string | null;

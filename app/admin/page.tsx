@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase, Profile } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
 import { BanDuration, banUntilFromDuration, isProtectedAccount } from '@/lib/admin';
-import { ROLE_LABEL, ROLE_COLOR, ROLE_POWERS, SiteRole } from '@/lib/roles';
-import { Shield, Ban, Unlock, Search } from 'lucide-react';
+import { ROLE_LABEL, ROLE_COLOR, SiteRole } from '@/lib/roles';
+import { BADGE_OPTIONS, badgeEmoji } from '@/lib/badges';
+import { Shield, Ban, Unlock, Search, CheckCircle2 } from 'lucide-react';
 
 const ASSIGNABLE: SiteRole[] = [
   'user',
@@ -21,7 +23,7 @@ const ASSIGNABLE: SiteRole[] = [
 ];
 
 export default function AdminPage() {
-  const { isAdmin, isOwner, loading: authLoading, user, role } = useAuth();
+  const { isAdmin, isOwner, loading: authLoading, user, role, appUser } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<Profile[]>([]);
   const [q, setQ] = useState('');
@@ -49,7 +51,6 @@ export default function AdminPage() {
   }
 
   async function banUser(id: string, duration: BanDuration, reason: string) {
-    if (id === user?.id) return setMsg('Cannot ban yourself');
     setBusy(id);
     setMsg(null);
     const { ban_until, is_permanent_ban } = banUntilFromDuration(duration);
@@ -67,7 +68,6 @@ export default function AdminPage() {
 
   async function unbanUser(id: string) {
     setBusy(id);
-    setMsg(null);
     const { error } = await supabase.rpc('admin_set_ban', {
       target_id: id,
       banned: false,
@@ -87,7 +87,36 @@ export default function AdminPage() {
       target_id: id,
       new_role: newRole,
     });
-    setMsg(error ? 'Role failed: ' + error.message : `Role → ${ROLE_LABEL[newRole]}`);
+    setMsg(error ? 'Role failed: ' + error.message : `✅ Role set to ${ROLE_LABEL[newRole]}`);
+    await loadUsers();
+    setBusy(null);
+  }
+
+  async function toggleVerified(u: Profile) {
+    setBusy(u.id);
+    const next = !u.is_verified;
+    const { error } = await supabase.rpc('staff_set_badges', {
+      target_id: u.id,
+      new_badges: u.badges || [],
+      verified: next,
+    });
+    setMsg(error ? error.message : next ? '✅ Verified badge ON' : 'Verified OFF');
+    await loadUsers();
+    setBusy(null);
+  }
+
+  async function toggleBadge(u: Profile, badgeId: string) {
+    setBusy(u.id);
+    const current = u.badges || [];
+    const next = current.includes(badgeId)
+      ? current.filter((b) => b !== badgeId)
+      : [...current, badgeId];
+    const { error } = await supabase.rpc('staff_set_badges', {
+      target_id: u.id,
+      new_badges: next,
+      verified: u.is_verified ?? null,
+    });
+    setMsg(error ? error.message : `Badges updated`);
     await loadUsers();
     setBusy(null);
   }
@@ -98,8 +127,8 @@ export default function AdminPage() {
     return (
       (u.display_name || '').toLowerCase().includes(s) ||
       (u.email || '').toLowerCase().includes(s) ||
-      (u.role || '').includes(s) ||
-      u.id.includes(s)
+      (u.discord_id || '').includes(s) ||
+      (u.role || '').includes(s)
     );
   });
 
@@ -107,39 +136,42 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen bg-discord-darker">
         <SiteHeader />
-        <p className="py-20 text-center text-gray-400">Admin access only</p>
+        <p className="py-20 text-center text-gray-400">Admin only</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-discord-darker pb-24">
+    <div className="min-h-screen bg-discord-darker pb-28">
       <SiteHeader />
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      <main className="mx-auto max-w-4xl px-4 py-6">
         <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/20">
             <Shield className="h-5 w-5 text-amber-400" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">Admin Panel</h1>
             <p className="text-xs text-gray-400">
-              Role: <span className="text-amber-400">{ROLE_LABEL[role]}</span>
+              {appUser?.username} · Role:{' '}
+              <span className="text-amber-400">{ROLE_LABEL[role]}</span>
             </p>
           </div>
         </div>
 
-        <div className="mb-4 rounded-xl border border-white/10 bg-discord-card p-3 text-xs text-gray-400">
-          <p className="mb-1 font-semibold text-gray-300">Admin powers</p>
-          <ul className="list-inside list-disc">
-            {(ROLE_POWERS.admin || []).map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
-          <p className="mt-2 text-gray-500">App Lock sirf Owner / Acting Owner</p>
+        <div className="mb-4 flex flex-wrap gap-2 text-xs">
+          <Link href="/panel/applications" className="rounded-lg bg-indigo-500/20 px-3 py-2 text-indigo-300">
+            Role applications
+          </Link>
+          <Link href="/panel/reports" className="rounded-lg bg-red-500/15 px-3 py-2 text-red-300">
+            Reports
+          </Link>
+          <Link href="/rules" className="rounded-lg bg-white/5 px-3 py-2 text-gray-400">
+            Rules
+          </Link>
         </div>
 
         {msg && (
-          <div className="mb-4 rounded-lg border border-white/10 bg-discord-card px-4 py-3 text-sm text-white">
+          <div className="mb-3 rounded-lg border border-white/10 bg-discord-card px-3 py-2 text-sm text-white">
             {msg}
           </div>
         )}
@@ -149,7 +181,7 @@ export default function AdminPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search users..."
+            placeholder="Search name, email, Discord ID..."
             className="w-full rounded-lg border border-white/10 bg-discord-card py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-discord-blurple"
           />
         </div>
@@ -157,7 +189,7 @@ export default function AdminPage() {
         {loading ? (
           <p className="text-gray-400">Loading...</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {filtered.map((u) => {
               const isSelf = u.id === user?.id;
               const uRole = (u.role as SiteRole) || 'user';
@@ -165,62 +197,128 @@ export default function AdminPage() {
                 email: u.email,
                 discordId: u.discord_id,
               });
-              return (
-                <div key={u.id} className="rounded-xl border border-white/5 bg-discord-card p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex gap-3">
-                      {u.avatar_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={u.avatar_url} alt="" className="h-12 w-12 rounded-full" />
-                      ) : (
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-discord-blurple text-sm font-bold text-white">
-                          {(u.display_name || '?')[0]}
-                        </div>
-                      )}
-                      <div>
-                        <p className="font-semibold text-white">
-                          {u.display_name || 'User'}
-                          {isSelf && <span className="ml-2 text-xs text-amber-400">(you)</span>}
-                        </p>
-                        <p className="text-xs text-gray-400">{u.email || '—'}</p>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[uRole]}`}>
-                            {ROLE_LABEL[uRole]}
-                          </span>
-                          {protectedUser && (
-                            <span className="rounded-full bg-yellow-500/20 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
-                              Protected
-                            </span>
-                          )}
-                        </div>
-                        {u.is_banned && (
-                          <p className="mt-1 text-xs text-red-400">BANNED</p>
-                        )}
-                      </div>
-                    </div>
+              const badges = u.badges || [];
 
-                    {!isSelf && (
-                      <div className="flex w-full flex-col gap-2">
-                        <div className="flex flex-wrap gap-1">
+              return (
+                <div key={u.id} className="rounded-xl border border-white/10 bg-discord-card p-4">
+                  <div className="flex gap-3">
+                    {u.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={u.avatar_url} alt="" className="h-12 w-12 rounded-full" />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-discord-blurple font-bold text-white">
+                        {(u.display_name || '?')[0]}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-center gap-1 font-semibold text-white">
+                        {u.display_name || 'User'}
+                        {u.is_verified && (
+                          <span title="Verified" className="text-sky-400">
+                            <CheckCircle2 className="inline h-4 w-4" />
+                          </span>
+                        )}
+                        {isSelf && <span className="text-xs text-amber-400">(you)</span>}
+                        {badges.map((b) => (
+                          <span key={b} title={b} className="text-sm">
+                            {badgeEmoji(b)}
+                          </span>
+                        ))}
+                      </p>
+                      <p className="text-xs text-gray-400">{u.email || '—'}</p>
+                      <p className="text-[10px] text-gray-500">
+                        Discord: {u.discord_id || '—'} · {u.id.slice(0, 8)}…
+                      </p>
+                      <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[uRole]}`}>
+                        {ROLE_LABEL[uRole]}
+                      </span>
+                      {protectedUser && (
+                        <span className="ml-1 rounded-full bg-yellow-500/20 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
+                          Protected
+                        </span>
+                      )}
+                      {u.is_banned && <p className="mt-1 text-xs text-red-400">BANNED</p>}
+                    </div>
+                  </div>
+
+                  {!isSelf && (
+                    <div className="mt-4 space-y-3 border-t border-white/5 pt-3">
+                      {/* ROLES — always visible */}
+                      <div>
+                        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-amber-400/90">
+                          Give role
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
                           {ASSIGNABLE.filter((r) => {
-                            if (r === 'owner' || r === 'acting_owner') return isOwner;
-                            if (r === 'admin') return isOwner;
+                            if (r === 'owner' || r === 'acting_owner' || r === 'admin') return isOwner;
                             return true;
                           }).map((r) => (
                             <button
                               key={r}
+                              type="button"
                               disabled={busy === u.id || uRole === r}
                               onClick={() => setRole(u.id, r)}
-                              className={`rounded-md px-2 py-1 text-[10px] font-semibold disabled:opacity-40 ${ROLE_COLOR[r]}`}
+                              className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-bold disabled:opacity-40 ${
+                                uRole === r
+                                  ? 'border-discord-blurple bg-discord-blurple/30 text-white'
+                                  : `${ROLE_COLOR[r]} border-white/10`
+                              }`}
                             >
                               {ROLE_LABEL[r]}
                             </button>
                           ))}
                         </div>
-                        {!protectedUser && (
+                      </div>
+
+                      {/* VERIFIED + BADGES */}
+                      <div>
+                        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-sky-400/90">
+                          Badges · Verified
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            disabled={busy === u.id}
+                            onClick={() => toggleVerified(u)}
+                            className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-bold ${
+                              u.is_verified
+                                ? 'border-sky-400 bg-sky-500/30 text-sky-200'
+                                : 'border-white/10 bg-white/5 text-gray-400'
+                            }`}
+                          >
+                            ✅ Verified
+                          </button>
+                          {BADGE_OPTIONS.filter((b) => b.id !== 'verified').map((b) => {
+                            const on = badges.includes(b.id);
+                            return (
+                              <button
+                                key={b.id}
+                                type="button"
+                                disabled={busy === u.id}
+                                onClick={() => toggleBadge(u, b.id)}
+                                className={`rounded-lg border px-2 py-1.5 text-[11px] ${
+                                  on
+                                    ? 'border-discord-blurple/50 bg-discord-blurple/20 text-white'
+                                    : 'border-white/10 bg-white/5 text-gray-400'
+                                }`}
+                              >
+                                {b.emoji} {b.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* BAN */}
+                      {!protectedUser && (
+                        <div>
+                          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-red-400/90">
+                            Ban
+                          </p>
                           <div className="flex flex-wrap gap-2">
                             {u.is_banned ? (
                               <button
+                                type="button"
                                 disabled={busy === u.id}
                                 onClick={() => unbanUser(u.id)}
                                 className="flex items-center gap-1 rounded-lg bg-discord-green/20 px-3 py-1.5 text-xs font-semibold text-discord-green"
@@ -231,6 +329,7 @@ export default function AdminPage() {
                               (['1h', '2h', '24h', 'permanent'] as BanDuration[]).map((d) => (
                                 <button
                                   key={d}
+                                  type="button"
                                   disabled={busy === u.id}
                                   onClick={() => {
                                     const reason =
@@ -246,10 +345,10 @@ export default function AdminPage() {
                               ))
                             )}
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
