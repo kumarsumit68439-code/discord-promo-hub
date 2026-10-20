@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
+import BotProviderSettings from '@/components/BotProviderSettings';
 import {
   Bot, ShieldCheck, MessageCircle, Sparkles, Clock3, Ban, Server,
   ExternalLink, Copy, Check, AlertTriangle, Settings2, TerminalSquare, Users, Ticket
@@ -152,6 +153,7 @@ export default function BotHostingPage() {
           <p className="mt-2 text-sm leading-6 text-gray-400">Bots can only moderate members when the server owner grants the relevant permissions and Discord's role hierarchy allows the action. Use explicit server authorization and audit logs for moderation actions.</p>
           <a className="mt-3 inline-flex items-center gap-2 text-sm text-indigo-300 hover:text-indigo-200" href="https://discord.com/developers/docs/topics/permissions" target="_blank" rel="noreferrer">Read Discord permissions documentation <ExternalLink className="h-4 w-4" /></a>
         </section>
+        <BotProviderSettings />
       </main>
       <SiteFooter />
     </div>
