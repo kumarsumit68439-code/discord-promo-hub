@@ -19,6 +19,51 @@ function fmt(s: number) {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
+function hideHost(hostId: string) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  host.style.position = 'fixed';
+  host.style.left = '-9999px';
+  host.style.top = '0';
+  host.style.width = '320px';
+  host.style.height = '180px';
+  host.style.opacity = '0';
+  host.style.pointerEvents = 'none';
+  host.style.zIndex = '0';
+  host.style.visibility = 'hidden';
+  const iframe = host.querySelector('iframe');
+  if (iframe) {
+    iframe.style.width = '320px';
+    iframe.style.height = '180px';
+  }
+}
+
+function showHostOverStage(
+  hostId: string,
+  stage: HTMLElement,
+  resizePlayer: (w: number, h: number) => void
+) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  const r = stage.getBoundingClientRect();
+  host.style.position = 'fixed';
+  host.style.left = `${r.left}px`;
+  host.style.top = `${r.top}px`;
+  host.style.width = `${r.width}px`;
+  host.style.height = `${r.height}px`;
+  host.style.opacity = '1';
+  host.style.visibility = 'visible';
+  host.style.pointerEvents = 'auto';
+  host.style.zIndex = '110';
+  host.style.background = '#000';
+  resizePlayer(r.width, r.height);
+  const iframe = host.querySelector('iframe');
+  if (iframe) {
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+  }
+}
+
 export default function MiniPlayer() {
   const {
     current,
@@ -40,118 +85,91 @@ export default function MiniPlayer() {
   const stageRef = useRef<HTMLDivElement>(null);
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 
-  // Keep one host in DOM always
+  // Host visibility by mode
   useEffect(() => {
-    if (!isFullscreen || !current) return;
+    if (!current) {
+      hideHost(playerHostId);
+      return;
+    }
 
-    const fit = () => {
-      const el = stageRef.current;
-      if (!el) {
-        resizePlayer(window.innerWidth, Math.max(200, window.innerHeight - 200));
-        return;
-      }
-      const r = el.getBoundingClientRect();
-      resizePlayer(r.width, r.height);
+    if (!isFullscreen) {
+      // Mini = audio only, video hidden off-screen (YT still plays)
+      hideHost(playerHostId);
+      resizePlayer(320, 180);
+      return;
+    }
+
+    const place = () => {
+      const stage = stageRef.current;
+      if (stage) showHostOverStage(playerHostId, stage, resizePlayer);
     };
-
-    fit();
-    const t = setTimeout(fit, 100);
-    window.addEventListener('resize', fit);
+    place();
+    const t1 = setTimeout(place, 50);
+    const t2 = setTimeout(place, 250);
+    window.addEventListener('resize', place);
     return () => {
-      clearTimeout(t);
-      window.removeEventListener('resize', fit);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('resize', place);
     };
-  }, [isFullscreen, current, resizePlayer]);
+  }, [current, isFullscreen, playerHostId, resizePlayer]);
 
-  // Mini mode size
-  useEffect(() => {
-    if (isFullscreen || !current) return;
-    resizePlayer(320, 180);
-  }, [isFullscreen, current, resizePlayer]);
-
+  // Always mount host node for YT API
   return (
     <>
-      {/* Stable YT host — moved with CSS only */}
       <div
         id={playerHostId}
-        style={
-          !current
-            ? {
-                position: 'fixed',
-                left: -9999,
-                top: 0,
-                width: 320,
-                height: 180,
-                opacity: 0,
-                pointerEvents: 'none',
-                zIndex: 0,
-              }
-            : isFullscreen
-              ? {
-                  position: 'absolute',
-                  inset: 0,
-                  width: '100%',
-                  height: '100%',
-                  opacity: 1,
-                  pointerEvents: 'auto',
-                  zIndex: 1,
-                }
-              : {
-                  position: 'fixed',
-                  right: 0,
-                  bottom: 0,
-                  width: 320,
-                  height: 180,
-                  opacity: 0.02,
-                  pointerEvents: 'none',
-                  zIndex: 0,
-                  overflow: 'hidden',
-                }
-        }
+        style={{
+          position: 'fixed',
+          left: -9999,
+          top: 0,
+          width: 320,
+          height: 180,
+          opacity: 0,
+          visibility: 'hidden',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
       />
 
       {!current ? null : isFullscreen ? (
         <div className="fixed inset-0 z-[100] flex flex-col bg-black">
-          {/* Top bar */}
-          <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black px-3 py-3">
+          <div className="relative z-[120] flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black px-3 py-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-white sm:text-base">{current.title}</p>
+              <p className="truncate text-sm font-semibold text-white">{current.title}</p>
               <p className="truncate text-xs text-gray-400">{current.channel}</p>
             </div>
             <button
               type="button"
-              onClick={() => setFullscreen(false)}
+              onClick={() => {
+                hideHost(playerHostId);
+                setFullscreen(false);
+              }}
               className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white/15 px-3 py-2 text-xs font-semibold text-white"
             >
               <Minimize2 className="h-4 w-4" /> Mini
             </button>
             <button
               type="button"
-              onClick={stop}
+              onClick={() => {
+                hideHost(playerHostId);
+                stop();
+              }}
               className="shrink-0 rounded-lg p-2 text-gray-400 hover:text-red-400"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          {/* VIDEO STAGE — host is portaled visually here via absolute child inside */}
-          <div ref={stageRef} className="relative z-0 min-h-0 flex-1 bg-black">
-            {/* When fullscreen, the #yt-main-player is position absolute inside this stage.
-                We re-parent via fixed overlay trick: actually host is sibling.
-                So we use a portal-like fixed region matching stage. */}
-          </div>
-
-          {/* Because YT host is a sibling fixed element, position it over the stage */}
-          <FullscreenHostReposition hostId={playerHostId} stageRef={stageRef} />
+          <div ref={stageRef} className="relative min-h-0 flex-1 bg-black" />
 
           {error && (
-            <p className="relative z-10 shrink-0 bg-red-500/20 px-4 py-2 text-center text-sm text-red-300">
+            <p className="relative z-[120] shrink-0 bg-red-500/20 px-4 py-2 text-center text-sm text-red-300">
               {error}
             </p>
           )}
 
-          {/* Controls */}
-          <div className="relative z-10 shrink-0 border-t border-white/10 bg-[#111214] px-4 py-4">
+          <div className="relative z-[120] shrink-0 border-t border-white/10 bg-[#111214] px-4 py-4">
             <input
               type="range"
               min={0}
@@ -233,7 +251,15 @@ export default function MiniPlayer() {
             >
               <Maximize2 className="h-4 w-4" />
             </button>
-            <button type="button" onClick={stop} className="rounded-lg p-2 text-gray-400 hover:text-red-400">
+            <button
+              type="button"
+              onClick={() => {
+                hideHost(playerHostId);
+                stop();
+              }}
+              className="rounded-lg p-2 text-gray-400 hover:text-red-400"
+              title="Stop"
+            >
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -241,53 +267,4 @@ export default function MiniPlayer() {
       )}
     </>
   );
-}
-
-/** Positions the YT iframe host exactly over the video stage */
-function FullscreenHostReposition({
-  hostId,
-  stageRef,
-}: {
-  hostId: string;
-  stageRef: React.RefObject<HTMLDivElement | null>;
-}) {
-  const { resizePlayer } = useMusicPlayer();
-
-  useEffect(() => {
-    const place = () => {
-      const host = document.getElementById(hostId);
-      const stage = stageRef.current;
-      if (!host || !stage) return;
-      const r = stage.getBoundingClientRect();
-      host.style.position = 'fixed';
-      host.style.left = `${r.left}px`;
-      host.style.top = `${r.top}px`;
-      host.style.width = `${r.width}px`;
-      host.style.height = `${r.height}px`;
-      host.style.opacity = '1';
-      host.style.pointerEvents = 'auto';
-      host.style.zIndex = '101';
-      host.style.background = '#000';
-      resizePlayer(r.width, r.height);
-
-      // Also stretch iframe inside if present
-      const iframe = host.querySelector('iframe');
-      if (iframe) {
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-      }
-    };
-
-    place();
-    const t1 = setTimeout(place, 50);
-    const t2 = setTimeout(place, 200);
-    window.addEventListener('resize', place);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      window.removeEventListener('resize', place);
-    };
-  }, [hostId, stageRef, resizePlayer]);
-
-  return null;
 }

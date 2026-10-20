@@ -134,7 +134,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const ensurePlayer = useCallback(async () => {
     await loadYTApi();
     if (playerRef.current || !window.YT) return;
-
     const el = document.getElementById(PLAYER_HOST);
     if (!el) return;
 
@@ -274,8 +273,18 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const stop = useCallback(() => {
     try {
       playerRef.current?.stopVideo();
+      playerRef.current?.pauseVideo();
     } catch {
       /* */
+    }
+    // Hide host immediately
+    const host = document.getElementById(PLAYER_HOST);
+    if (host) {
+      host.style.left = '-9999px';
+      host.style.opacity = '0';
+      host.style.visibility = 'hidden';
+      host.style.pointerEvents = 'none';
+      host.style.zIndex = '0';
     }
     setCurrent(null);
     setIsPlaying(false);
@@ -324,18 +333,18 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const setFullscreen = useCallback(
     (v: boolean) => {
       setFullscreenState(v);
-      // Resize after paint
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          if (v) {
-            const w = window.innerWidth;
-            const h = Math.max(200, window.innerHeight - 200);
-            resizePlayer(w, h);
-          } else {
-            resizePlayer(320, 180);
-          }
-        }, 50);
-      });
+      if (!v) {
+        // leaving fullscreen → hide video surface
+        const host = document.getElementById(PLAYER_HOST);
+        if (host) {
+          host.style.left = '-9999px';
+          host.style.opacity = '0';
+          host.style.visibility = 'hidden';
+          host.style.pointerEvents = 'none';
+          host.style.zIndex = '0';
+        }
+        resizePlayer(320, 180);
+      }
     },
     [resizePlayer]
   );
