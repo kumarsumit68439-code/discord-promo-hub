@@ -14,10 +14,7 @@ import type { YTVideo } from '@/lib/youtube';
 declare global {
   interface Window {
     YT?: {
-      Player: new (
-        el: string | HTMLElement,
-        opts: Record<string, unknown>
-      ) => YTPlayer;
+      Player: new (el: string | HTMLElement, opts: Record<string, unknown>) => YTPlayer;
       PlayerState: {
         UNSTARTED: number;
         ENDED: number;
@@ -36,11 +33,11 @@ type YTPlayer = {
   pauseVideo: () => void;
   stopVideo: () => void;
   loadVideoById: (opts: string | { videoId: string; startSeconds?: number }) => void;
-  cueVideoById: (opts: string | { videoId: string }) => void;
   seekTo: (seconds: number, allowSeekAhead: boolean) => void;
   getPlayerState: () => number;
   getCurrentTime: () => number;
   getDuration: () => number;
+  setSize: (width: number, height: number) => void;
   destroy: () => void;
 };
 
@@ -59,6 +56,7 @@ type MusicCtx = {
   prev: () => void;
   seek: (seconds: number) => void;
   setFullscreen: (v: boolean) => void;
+  resizePlayer: (w: number, h: number) => void;
   playerHostId: string;
 };
 
@@ -89,7 +87,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const [current, setCurrent] = useState<YTVideo | null>(null);
   const [queue, setQueue] = useState<YTVideo[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isFullscreen, setFullscreen] = useState(false);
+  const [isFullscreen, setFullscreenState] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +104,14 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     currentRef.current = current;
   }, [current]);
+
+  const resizePlayer = useCallback((w: number, h: number) => {
+    try {
+      playerRef.current?.setSize(Math.max(1, Math.floor(w)), Math.max(1, Math.floor(h)));
+    } catch {
+      /* */
+    }
+  }, []);
 
   const playNextFromQueue = useCallback(() => {
     const q = queueRef.current;
@@ -133,8 +139,8 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     if (!el) return;
 
     playerRef.current = new window.YT.Player(PLAYER_HOST, {
-      height: '100%',
-      width: '100%',
+      height: '180',
+      width: '320',
       playerVars: {
         autoplay: 1,
         controls: 1,
@@ -176,7 +182,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
           }
         },
         onError: (e: { data: number }) => {
-          // 2=invalid id, 5=html5, 100=not found, 101/150=embed not allowed
           const codes: Record<number, string> = {
             2: 'Invalid video ID',
             5: 'HTML5 player error',
@@ -204,7 +209,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     };
   }, [ensurePlayer]);
 
-  // Progress ticker
   useEffect(() => {
     if (!isPlaying) return;
     const t = setInterval(() => {
@@ -227,13 +231,9 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       setCurrent(video);
       setCurrentTime(0);
       setDuration(0);
-      if (queueList && queueList.length) {
-        setQueue(queueList);
-      } else {
-        setQueue((prev) => {
-          if (prev.some((v) => v.id === video.id)) return prev;
-          return [...prev, video];
-        });
+      if (queueList && queueList.length) setQueue(queueList);
+      else {
+        setQueue((prev) => (prev.some((v) => v.id === video.id) ? prev : [...prev, video]));
       }
       await ensurePlayer();
       if (readyRef.current && playerRef.current) {
@@ -282,7 +282,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTime(0);
     setDuration(0);
     setError(null);
-    setFullscreen(false);
+    setFullscreenState(false);
   }, []);
 
   const next = useCallback(() => {
@@ -298,7 +298,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     const q = queueRef.current;
     const cur = currentRef.current;
     if (!q.length) return;
-    // If >3s into song, restart; else previous track
     try {
       if (playerRef.current && playerRef.current.getCurrentTime() > 3) {
         playerRef.current.seekTo(0, true);
@@ -322,6 +321,25 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setFullscreen = useCallback(
+    (v: boolean) => {
+      setFullscreenState(v);
+      // Resize after paint
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (v) {
+            const w = window.innerWidth;
+            const h = Math.max(200, window.innerHeight - 200);
+            resizePlayer(w, h);
+          } else {
+            resizePlayer(320, 180);
+          }
+        }, 50);
+      });
+    },
+    [resizePlayer]
+  );
+
   return (
     <Ctx.Provider
       value={{
@@ -339,6 +357,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         prev,
         seek,
         setFullscreen,
+        resizePlayer,
         playerHostId: PLAYER_HOST,
       }}
     >
