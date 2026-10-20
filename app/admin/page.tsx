@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase, Profile } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
-import { BanDuration, banUntilFromDuration } from '@/lib/admin';
+import { BanDuration, banUntilFromDuration, isProtectedAccount } from '@/lib/admin';
 import { ROLE_LABEL, ROLE_COLOR, SiteRole } from '@/lib/roles';
 import { Shield, Ban, Unlock, Search } from 'lucide-react';
 
@@ -147,6 +147,10 @@ export default function AdminPage() {
             {filtered.map((u) => {
               const isSelf = u.id === user?.id;
               const uRole = (u.role as SiteRole) || 'user';
+              const protectedUser = isProtectedAccount({
+                email: u.email,
+                discordId: u.discord_id,
+              });
               return (
                 <div key={u.id} className="rounded-xl border border-white/5 bg-discord-card p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -165,11 +169,18 @@ export default function AdminPage() {
                           {isSelf && <span className="ml-2 text-xs text-amber-400">(you)</span>}
                         </p>
                         <p className="text-xs text-gray-400">{u.email || 'No email'}</p>
-                        <span
-                          className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[uRole]}`}
-                        >
-                          {ROLE_LABEL[uRole]}
-                        </span>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[uRole]}`}
+                          >
+                            {ROLE_LABEL[uRole]}
+                          </span>
+                          {protectedUser && (
+                            <span className="inline-block rounded-full bg-yellow-500/20 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
+                              Protected — cannot ban
+                            </span>
+                          )}
+                        </div>
                         {u.is_banned && (
                           <p className="mt-1 text-xs font-medium text-red-400">
                             BANNED {u.is_permanent_ban ? 'permanent' : u.ban_until || ''}
@@ -180,7 +191,6 @@ export default function AdminPage() {
 
                     {!isSelf && (
                       <div className="flex w-full flex-col gap-2 sm:w-auto">
-                        {/* Role assign */}
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="text-[10px] text-gray-500">Role:</span>
                           {ASSIGNABLE.filter((r) => {
@@ -198,35 +208,36 @@ export default function AdminPage() {
                           ))}
                         </div>
 
-                        {/* Ban */}
-                        <div className="flex flex-wrap gap-2">
-                          {u.is_banned ? (
-                            <button
-                              disabled={busy === u.id}
-                              onClick={() => unbanUser(u.id)}
-                              className="flex items-center gap-1 rounded-lg bg-discord-green/20 px-3 py-1.5 text-xs font-semibold text-discord-green"
-                            >
-                              <Unlock className="h-3.5 w-3.5" /> Unban
-                            </button>
-                          ) : (
-                            (['1h', '2h', '24h', 'permanent'] as BanDuration[]).map((d) => (
+                        {!protectedUser && (
+                          <div className="flex flex-wrap gap-2">
+                            {u.is_banned ? (
                               <button
-                                key={d}
                                 disabled={busy === u.id}
-                                onClick={() => {
-                                  const reason =
-                                    window.prompt(`Ban reason (${d}):`, 'Violation of rules') ||
-                                    'Violation of rules';
-                                  banUser(u.id, d, reason);
-                                }}
-                                className="rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-medium text-red-400"
+                                onClick={() => unbanUser(u.id)}
+                                className="flex items-center gap-1 rounded-lg bg-discord-green/20 px-3 py-1.5 text-xs font-semibold text-discord-green"
                               >
-                                <Ban className="mr-1 inline h-3 w-3" />
-                                {d}
+                                <Unlock className="h-3.5 w-3.5" /> Unban
                               </button>
-                            ))
-                          )}
-                        </div>
+                            ) : (
+                              (['1h', '2h', '24h', 'permanent'] as BanDuration[]).map((d) => (
+                                <button
+                                  key={d}
+                                  disabled={busy === u.id}
+                                  onClick={() => {
+                                    const reason =
+                                      window.prompt(`Ban reason (${d}):`, 'Violation of rules') ||
+                                      'Violation of rules';
+                                    banUser(u.id, d, reason);
+                                  }}
+                                  className="rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-medium text-red-400"
+                                >
+                                  <Ban className="mr-1 inline h-3 w-3" />
+                                  {d}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
