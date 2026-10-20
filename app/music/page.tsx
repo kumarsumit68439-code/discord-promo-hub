@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { parseYouTubeId, YTVideo } from '@/lib/youtube';
 import SiteHeader from '@/components/SiteHeader';
+import SiteFooter from '@/components/SiteFooter';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
-import { Search, Play, Link2, Music2, Loader2 } from 'lucide-react';
+import { Search, Play, Link2, Music2, Loader2, Maximize2 } from 'lucide-react';
 
 export default function MusicPage() {
   const [query, setQuery] = useState('');
@@ -12,7 +13,7 @@ export default function MusicPage() {
   const [results, setResults] = useState<YTVideo[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { play, current } = useMusicPlayer();
+  const { play, current, setFullscreen } = useMusicPlayer();
 
   async function search(e?: React.FormEvent) {
     e?.preventDefault();
@@ -24,6 +25,7 @@ export default function MusicPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Search failed');
       setResults(data.items || []);
+      if (!(data.items || []).length) setError('No results');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
       setResults([]);
@@ -47,6 +49,10 @@ export default function MusicPage() {
     });
   }
 
+  function playTrack(v: YTVideo) {
+    play(v, results.length ? results : [v]);
+  }
+
   return (
     <div className="min-h-screen bg-discord-darker pb-36">
       <SiteHeader />
@@ -56,9 +62,9 @@ export default function MusicPage() {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/20">
             <Music2 className="h-6 w-6 text-red-400" />
           </div>
-          <h1 className="text-2xl font-bold text-white sm:text-3xl">YouTube Music Engine</h1>
+          <h1 className="text-2xl font-bold text-white sm:text-3xl">YouTube Music</h1>
           <p className="mt-2 text-sm text-gray-400">
-            Search or paste a link · mini player (YouTube Data API v3)
+            Mini = song controls · Full screen = video · Seek / next / pause / back
           </p>
         </div>
 
@@ -103,6 +109,15 @@ export default function MusicPage() {
           </div>
         )}
 
+        {current && (
+          <button
+            onClick={() => setFullscreen(true)}
+            className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-discord-blurple/40 bg-discord-blurple/15 py-3 text-sm font-semibold text-discord-blurple"
+          >
+            <Maximize2 className="h-4 w-4" /> Open full screen video
+          </button>
+        )}
+
         {results.length > 0 && (
           <div className="space-y-2">
             {results.map((v) => {
@@ -110,7 +125,7 @@ export default function MusicPage() {
               return (
                 <button
                   key={v.id}
-                  onClick={() => play(v)}
+                  onClick={() => playTrack(v)}
                   className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${
                     active
                       ? 'border-discord-blurple/50 bg-discord-blurple/10'
@@ -139,6 +154,7 @@ export default function MusicPage() {
           </div>
         )}
       </main>
+      <SiteFooter />
     </div>
   );
 }
