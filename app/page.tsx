@@ -12,6 +12,7 @@ import {
   Filter,
   X,
   Server,
+  Bot,
   Link2,
   Trash2,
   Users,
@@ -118,6 +119,7 @@ export default function Home() {
     { href: '/messages', label: 'Messages', icon: MessagesSquare, desc: 'Realtime chat' },
     { href: '/music', label: 'Music', icon: Music2, desc: 'YouTube player' },
     { href: '/profile', label: 'Profile', icon: User, desc: 'Edit & Discord check' },
+    { href: '/hosting', label: 'Bot Hosting', icon: Bot, desc: 'Welcome, moderation & AI bots' },
   ];
 
   return (
@@ -134,7 +136,7 @@ export default function Home() {
           </p>
         </section>
 
-        <div className="mb-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mb-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {quick.map((q) => (
             <Link
               key={q.href}
