@@ -27,13 +27,13 @@ Free platform where Discord users can promote their Discord servers and websites
 4. Copy **Client ID** and **Client Secret**
 5. Under **Redirects**, add:
    ```
-   https://idqalpeygygpznvcixei.supabase.co/auth/v1/callback
+   https://nimduknedcjsmimaszvu.supabase.co/auth/v1/callback
    ```
 6. Save changes
 
 ### 2. Enable Discord in Supabase
 
-1. Open [Supabase Dashboard](https://supabase.com/dashboard/project/idqalpeygygpznvcixei/auth/providers)
+1. Open [Supabase Dashboard](https://supabase.com/dashboard/project/nimduknedcjsmimaszvu/auth/providers)
 2. **Authentication** → **Providers** → **Discord**
 3. Enable Discord
 4. Paste Client ID + Client Secret
@@ -51,7 +51,7 @@ Free platform where Discord users can promote their Discord servers and websites
 ## Environment Variables
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://idqalpeygygpznvcixei.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://nimduknedcjsmimaszvu.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 ```
 
