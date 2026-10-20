@@ -27,6 +27,11 @@ export type Profile = {
   discord_id: string | null;
   discord_username: string | null;
   avatar_url: string | null;
+  email: string | null;
+  is_banned: boolean | null;
+  is_permanent_ban: boolean | null;
+  ban_until: string | null;
+  ban_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -38,6 +43,15 @@ export type AppUser = {
   avatarUrl: string | null;
   fullName: string | null;
   discordId: string | null;
+};
+
+export type Message = {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
 };
 
 export function getDiscordProfile(user: {
@@ -57,7 +71,7 @@ export function getDiscordProfile(user: {
     (meta.preferred_username as string) ||
     (identityData.full_name as string) ||
     user.email?.split('@')[0] ||
-    'Discord User';
+    'User';
 
   const avatarUrl =
     (meta.avatar_url as string) ||
@@ -79,4 +93,25 @@ export function getDiscordProfile(user: {
     fullName: (meta.full_name as string) || null,
     discordId,
   };
+}
+
+export async function ensureProfile(user: {
+  id: string;
+  email?: string;
+  user_metadata?: Record<string, unknown>;
+  identities?: Array<{ provider: string; id: string; identity_data?: Record<string, unknown> }>;
+}) {
+  const au = getDiscordProfile(user);
+  await supabase.from('profiles').upsert(
+    {
+      id: user.id,
+      display_name: au.username,
+      discord_username: au.username,
+      avatar_url: au.avatarUrl,
+      discord_id: au.discordId,
+      email: user.email || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'id', ignoreDuplicates: false }
+  );
 }

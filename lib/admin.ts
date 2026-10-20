@@ -1,0 +1,49 @@
+/** Only these identities can access Admin Panel */
+export const ADMIN_EMAIL = 'sumitjilowa34@gmail.com';
+export const ADMIN_DISCORD_ID = '1487343086198853785';
+
+export function isAdminUser(opts: {
+  email?: string | null;
+  discordId?: string | null;
+}): boolean {
+  const email = (opts.email || '').toLowerCase().trim();
+  const discordId = (opts.discordId || '').trim();
+  return email === ADMIN_EMAIL.toLowerCase() || discordId === ADMIN_DISCORD_ID;
+}
+
+export type BanDuration = '1h' | '2h' | '24h' | 'permanent';
+
+export function banUntilFromDuration(d: BanDuration): {
+  ban_until: string | null;
+  is_permanent_ban: boolean;
+} {
+  if (d === 'permanent') return { ban_until: null, is_permanent_ban: true };
+  const ms =
+    d === '1h' ? 3600_000 : d === '2h' ? 7200_000 : 24 * 3600_000;
+  return {
+    ban_until: new Date(Date.now() + ms).toISOString(),
+    is_permanent_ban: false,
+  };
+}
+
+export function isCurrentlyBanned(p: {
+  is_banned?: boolean | null;
+  is_permanent_ban?: boolean | null;
+  ban_until?: string | null;
+}): boolean {
+  if (!p.is_banned) return false;
+  if (p.is_permanent_ban) return true;
+  if (!p.ban_until) return true;
+  return new Date(p.ban_until).getTime() > Date.now();
+}
+
+export function banLabel(p: {
+  is_permanent_ban?: boolean | null;
+  ban_until?: string | null;
+}): string {
+  if (p.is_permanent_ban) return 'permanently';
+  if (p.ban_until) {
+    return `until ${new Date(p.ban_until).toLocaleString()}`;
+  }
+  return 'temporarily';
+}
