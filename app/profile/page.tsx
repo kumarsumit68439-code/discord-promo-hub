@@ -1,139 +1,53 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  supabase,
-  getDiscordProfile,
-  AppUser,
-  Profile,
-} from '@/lib/supabase';
+import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
-import {
-  User,
-  Save,
-  CheckCircle2,
-  XCircle,
-  MessageCircle,
-  Mail,
-  Hash,
-  Shield,
-} from 'lucide-react';
-import type { User as SBUser } from '@supabase/supabase-js';
+import { User, Save, CheckCircle2, XCircle, Mail, Hash, Shield } from 'lucide-react';
 
 export default function ProfilePage() {
-  const router = useRouter();
-  const [user, setUser] = useState<SBUser | null>(null);
-  const [appUser, setAppUser] = useState<AppUser | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { user, appUser, profile, loading, refreshProfile, signInDiscord } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user) {
-        setLoading(false);
-        return;
-      }
-      setUser(session.user);
-      const au = getDiscordProfile(session.user);
-      setAppUser(au);
-      await loadProfile(session.user.id, au);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (!session?.user) {
-        setUser(null);
-        setAppUser(null);
-        setProfile(null);
-      } else {
-        setUser(session.user);
-        setAppUser(getDiscordProfile(session.user));
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  async function loadProfile(uid: string, au: AppUser) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', uid).maybeSingle();
-    if (data) {
-      setProfile(data);
-      setDisplayName(data.display_name || au.username);
-      setBio(data.bio || '');
-    } else {
-      // create profile row
-      const row = {
-        id: uid,
-        display_name: au.username,
-        discord_username: au.username,
-        avatar_url: au.avatarUrl,
-        discord_id: au.discordId,
-        bio: null as string | null,
-      };
-      await supabase.from('profiles').upsert(row);
-      setProfile({ ...row, bio: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-      setDisplayName(au.username);
-      setBio('');
+    if (profile) {
+      setDisplayName(profile.display_name || appUser?.username || '');
+      setBio(profile.bio || '');
+    } else if (appUser) {
+      setDisplayName(appUser.username);
     }
-  }
-
-  async function signIn() {
-    await supabase.auth.signInWithOAuth({
-      provider: 'discord',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        scopes: 'identify email',
-      },
-    });
-  }
-
-  async function signOut() {
-    await supabase.auth.signOut();
-    router.push('/');
-  }
+  }, [profile, appUser]);
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !appUser) return;
     setSaving(true);
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({
-        id: user.id,
-        display_name: displayName.trim() || appUser?.username,
-        bio: bio.trim() || null,
-        discord_username: appUser?.username,
-        avatar_url: appUser?.avatarUrl,
-        discord_id: appUser?.discordId,
-        updated_at: new Date().toISOString(),
-      });
+    await supabase.from('profiles').upsert({
+      id: user.id,
+      display_name: displayName.trim() || appUser.username,
+      bio: bio.trim() || null,
+      discord_username: appUser.username,
+      avatar_url: appUser.avatarUrl,
+      discord_id: appUser.discordId,
+      email: user.email || null,
+      updated_at: new Date().toISOString(),
+    });
+    await refreshProfile();
     setSaving(false);
-    if (error) {
-      alert(error.message);
-      return;
-    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
 
-  const discordConnected = Boolean(
-    user?.app_metadata?.provider === 'discord' ||
-      user?.identities?.some((i) => i.provider === 'discord')
-  );
-
   if (loading) {
     return (
       <div className="min-h-screen bg-discord-darker">
-        <SiteHeader profile={null} authLoading onLogin={signIn} onLogout={signOut} />
-        <div className="flex justify-center py-20">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-discord-blurple border-t-transparent" />
-        </div>
+        <SiteHeader />
+        <p className="py-20 text-center text-gray-400">Loading...</p>
       </div>
     );
   }
@@ -141,130 +55,95 @@ export default function ProfilePage() {
   if (!user || !appUser) {
     return (
       <div className="min-h-screen bg-discord-darker">
-        <SiteHeader profile={null} onLogin={signIn} onLogout={signOut} />
+        <SiteHeader />
         <div className="mx-auto max-w-md px-4 py-20 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-discord-blurple/20">
-            <User className="h-8 w-8 text-discord-blurple" />
-          </div>
-          <h1 className="mb-2 text-2xl font-bold text-white">Discord Account</h1>
-          <p className="mb-6 text-gray-400">
-            Login with Discord to view your account status and edit your profile.
-          </p>
-          <button
-            onClick={signIn}
-            className="inline-flex items-center gap-2 rounded-lg bg-discord-blurple px-6 py-3 text-sm font-semibold text-white hover:bg-[#4752c4]"
+          <User className="mx-auto mb-4 h-12 w-12 text-discord-blurple" />
+          <h1 className="mb-2 text-xl font-bold text-white">Your profile</h1>
+          <p className="mb-6 text-gray-400">Login to edit profile and check Discord account</p>
+          <Link
+            href="/login"
+            className="inline-block rounded-lg bg-discord-blurple px-6 py-3 text-sm font-semibold text-white"
           >
-            <MessageCircle className="h-5 w-5" />
-            Login with Discord
-          </button>
+            Login
+          </Link>
         </div>
       </div>
     );
   }
 
+  const discordConnected = Boolean(appUser.discordId);
+
   return (
     <div className="min-h-screen bg-discord-darker pb-28">
-      <SiteHeader profile={appUser} onLogin={signIn} onLogout={signOut} />
-
+      <SiteHeader />
       <main className="mx-auto max-w-2xl px-4 py-8">
         <h1 className="mb-6 text-2xl font-bold text-white">Account & Profile</h1>
 
-        {/* Discord account check */}
         <section className="mb-6 rounded-2xl border border-white/5 bg-discord-card p-5">
-          <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-400">
-            <Shield className="h-4 w-4" />
-            Discord Account Check
+          <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase text-gray-400">
+            <Shield className="h-4 w-4" /> Discord account check
           </h2>
-
-          <div className="flex items-start gap-4">
+          <div className="flex gap-4">
             {appUser.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={appUser.avatarUrl}
-                alt=""
-                className="h-16 w-16 rounded-full ring-2 ring-discord-blurple/40"
-              />
+              <img src={appUser.avatarUrl} alt="" className="h-16 w-16 rounded-full" />
             ) : (
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-discord-blurple text-xl font-bold text-white">
-                {appUser.username[0]?.toUpperCase()}
+                {appUser.username[0]}
               </div>
             )}
-
-            <div className="flex-1 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-lg font-semibold text-white">{appUser.username}</span>
-                {discordConnected ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-discord-green/15 px-2.5 py-0.5 text-xs font-medium text-discord-green">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Discord linked
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-medium text-red-400">
-                    <XCircle className="h-3.5 w-3.5" />
-                    Not linked
-                  </span>
-                )}
-              </div>
-
-              <div className="grid gap-1.5 text-sm text-gray-400">
-                {appUser.email && (
-                  <p className="flex items-center gap-2">
-                    <Mail className="h-3.5 w-3.5" />
-                    {appUser.email}
-                  </p>
-                )}
-                {appUser.discordId && (
-                  <p className="flex items-center gap-2">
-                    <Hash className="h-3.5 w-3.5" />
-                    Discord ID: {appUser.discordId}
-                  </p>
-                )}
-                <p className="flex items-center gap-2 text-xs text-gray-500">
-                  User UID: {user.id.slice(0, 8)}…
+            <div>
+              <p className="text-lg font-semibold text-white">{appUser.username}</p>
+              {discordConnected ? (
+                <span className="inline-flex items-center gap-1 text-xs text-discord-green">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Discord linked
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs text-amber-400">
+                  <XCircle className="h-3.5 w-3.5" /> Email account (link Discord optional)
+                </span>
+              )}
+              {user.email && (
+                <p className="mt-1 flex items-center gap-1 text-sm text-gray-400">
+                  <Mail className="h-3.5 w-3.5" /> {user.email}
                 </p>
-              </div>
+              )}
+              {appUser.discordId && (
+                <p className="flex items-center gap-1 text-sm text-gray-400">
+                  <Hash className="h-3.5 w-3.5" /> {appUser.discordId}
+                </p>
+              )}
+              <Link href={`/u/${user.id}`} className="mt-2 inline-block text-sm text-discord-blurple">
+                View public profile →
+              </Link>
             </div>
           </div>
         </section>
 
-        {/* Edit profile */}
         <section className="rounded-2xl border border-white/5 bg-discord-card p-5">
-          <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-400">
-            <User className="h-4 w-4" />
-            Edit Profile
-          </h2>
-
+          <h2 className="mb-4 text-sm font-semibold uppercase text-gray-400">Edit profile</h2>
           <form onSubmit={saveProfile} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-300">Display name</label>
+              <label className="mb-1 block text-sm text-gray-300">Display name</label>
               <input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                maxLength={64}
                 className="w-full rounded-lg border border-white/10 bg-discord-darker px-3 py-2.5 text-sm text-white outline-none focus:border-discord-blurple"
-                placeholder="Your public name"
               />
-              <p className="mt-1 text-xs text-gray-500">
-                Discord name stays the same; this is your hub display name.
-              </p>
             </div>
-
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-300">Bio</label>
+              <label className="mb-1 block text-sm text-gray-300">Bio</label>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 rows={3}
-                maxLength={200}
-                className="w-full resize-none rounded-lg border border-white/10 bg-discord-darker px-3 py-2.5 text-sm text-white outline-none focus:border-discord-blurple"
-                placeholder="A short bio about you or your community..."
+                className="w-full rounded-lg border border-white/10 bg-discord-darker px-3 py-2.5 text-sm text-white outline-none focus:border-discord-blurple"
               />
             </div>
-
             <button
               type="submit"
               disabled={saving}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-discord-blurple py-3 text-sm font-semibold text-white hover:bg-[#4752c4] disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-discord-blurple py-3 text-sm font-semibold text-white"
             >
               {saved ? (
                 <>
@@ -272,7 +151,7 @@ export default function ProfilePage() {
                 </>
               ) : (
                 <>
-                  <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save profile'}
+                  <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save'}
                 </>
               )}
             </button>
