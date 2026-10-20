@@ -6,10 +6,19 @@ import { supabase, Profile } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
 import { BanDuration, banUntilFromDuration, isProtectedAccount } from '@/lib/admin';
-import { ROLE_LABEL, ROLE_COLOR, SiteRole } from '@/lib/roles';
+import { ROLE_LABEL, ROLE_COLOR, ROLE_POWERS, SiteRole } from '@/lib/roles';
 import { Shield, Ban, Unlock, Search } from 'lucide-react';
 
-const ASSIGNABLE: SiteRole[] = ['user', 'helper', 'developer', 'moderator', 'admin', 'owner'];
+const ASSIGNABLE: SiteRole[] = [
+  'user',
+  'staff',
+  'helper',
+  'developer',
+  'moderator',
+  'admin',
+  'acting_owner',
+  'owner',
+];
 
 export default function AdminPage() {
   const { isAdmin, isOwner, loading: authLoading, user, role } = useAuth();
@@ -88,9 +97,7 @@ export default function AdminPage() {
     if (!s) return true;
     return (
       (u.display_name || '').toLowerCase().includes(s) ||
-      (u.discord_username || '').toLowerCase().includes(s) ||
       (u.email || '').toLowerCase().includes(s) ||
-      (u.discord_id || '').includes(s) ||
       (u.role || '').includes(s) ||
       u.id.includes(s)
     );
@@ -100,9 +107,7 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen bg-discord-darker">
         <SiteHeader />
-        <p className="py-20 text-center text-gray-400">
-          {authLoading ? 'Loading...' : 'Admin access only — role required'}
-        </p>
+        <p className="py-20 text-center text-gray-400">Admin access only</p>
       </div>
     );
   }
@@ -111,17 +116,26 @@ export default function AdminPage() {
     <div className="min-h-screen bg-discord-darker pb-24">
       <SiteHeader />
       <main className="mx-auto max-w-4xl px-4 py-8">
-        <div className="mb-6 flex items-center gap-3">
+        <div className="mb-4 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20">
             <Shield className="h-5 w-5 text-amber-400" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">Admin Panel</h1>
             <p className="text-xs text-gray-400">
-              Your role: <span className="text-amber-400">{ROLE_LABEL[role]}</span> · Ban +
-              assign roles
+              Role: <span className="text-amber-400">{ROLE_LABEL[role]}</span>
             </p>
           </div>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-white/10 bg-discord-card p-3 text-xs text-gray-400">
+          <p className="mb-1 font-semibold text-gray-300">Admin powers</p>
+          <ul className="list-inside list-disc">
+            {(ROLE_POWERS.admin || []).map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+          <p className="mt-2 text-gray-500">App Lock sirf Owner / Acting Owner</p>
         </div>
 
         {msg && (
@@ -165,36 +179,32 @@ export default function AdminPage() {
                       )}
                       <div>
                         <p className="font-semibold text-white">
-                          {u.display_name || u.discord_username || 'User'}
+                          {u.display_name || 'User'}
                           {isSelf && <span className="ml-2 text-xs text-amber-400">(you)</span>}
                         </p>
-                        <p className="text-xs text-gray-400">{u.email || 'No email'}</p>
+                        <p className="text-xs text-gray-400">{u.email || '—'}</p>
                         <div className="mt-1 flex flex-wrap gap-1">
-                          <span
-                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[uRole]}`}
-                          >
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[uRole]}`}>
                             {ROLE_LABEL[uRole]}
                           </span>
                           {protectedUser && (
-                            <span className="inline-block rounded-full bg-yellow-500/20 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
-                              Protected — cannot ban
+                            <span className="rounded-full bg-yellow-500/20 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
+                              Protected
                             </span>
                           )}
                         </div>
                         {u.is_banned && (
-                          <p className="mt-1 text-xs font-medium text-red-400">
-                            BANNED {u.is_permanent_ban ? 'permanent' : u.ban_until || ''}
-                          </p>
+                          <p className="mt-1 text-xs text-red-400">BANNED</p>
                         )}
                       </div>
                     </div>
 
                     {!isSelf && (
-                      <div className="flex w-full flex-col gap-2 sm:w-auto">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-[10px] text-gray-500">Role:</span>
+                      <div className="flex w-full flex-col gap-2">
+                        <div className="flex flex-wrap gap-1">
                           {ASSIGNABLE.filter((r) => {
-                            if (r === 'owner' || r === 'admin') return isOwner;
+                            if (r === 'owner' || r === 'acting_owner') return isOwner;
+                            if (r === 'admin') return isOwner;
                             return true;
                           }).map((r) => (
                             <button
@@ -207,7 +217,6 @@ export default function AdminPage() {
                             </button>
                           ))}
                         </div>
-
                         {!protectedUser && (
                           <div className="flex flex-wrap gap-2">
                             {u.is_banned ? (
@@ -225,11 +234,11 @@ export default function AdminPage() {
                                   disabled={busy === u.id}
                                   onClick={() => {
                                     const reason =
-                                      window.prompt(`Ban reason (${d}):`, 'Violation of rules') ||
+                                      window.prompt(`Ban (${d}):`, 'Violation of rules') ||
                                       'Violation of rules';
                                     banUser(u.id, d, reason);
                                   }}
-                                  className="rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-medium text-red-400"
+                                  className="rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs text-red-400"
                                 >
                                   <Ban className="mr-1 inline h-3 w-3" />
                                   {d}
