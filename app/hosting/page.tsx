@@ -5,7 +5,7 @@ import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
 import {
   Bot, ShieldCheck, MessageCircle, Sparkles, Clock3, Ban, Server,
-  ExternalLink, Copy, Check, AlertTriangle, Settings2, TerminalSquare
+  ExternalLink, Copy, Check, AlertTriangle, Settings2, TerminalSquare, Users, Ticket
 } from 'lucide-react';
 
 const services = [
@@ -13,6 +13,8 @@ const services = [
   { id: 'moderation', title: 'Timeout & Moderation Bot', icon: Clock3, color: 'text-amber-300', detail: 'Slash-command moderation with permission checks, audit reasons and configurable timeout limits.' },
   { id: 'ban', title: 'Ban Protection Bot', icon: Ban, color: 'text-rose-300', detail: 'Ban and unban commands, moderation logs and role-hierarchy validation.' },
   { id: 'ai', title: 'AI Chat Bot', icon: Sparkles, color: 'text-violet-300', detail: 'AI-powered server chat using a backend model provider and configurable channel rules.' },
+  { id: 'supporter', title: 'Supporter Bot', icon: Users, color: 'text-emerald-300', detail: 'Grant or revoke a configured supporter role with permission checks and moderation logs.' },
+  { id: 'invite', title: 'Invite Tracking Bot', icon: Ticket, color: 'text-sky-300', detail: 'Track attributed member joins and show invite counts and a leaderboard; durable storage needs a database.' },
 ];
 
 export default function BotHostingPage() {
@@ -47,7 +49,7 @@ export default function BotHostingPage() {
             </div>
             <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl">Discord Bot Hosting</h1>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-300 sm:text-base">
-              Manage your welcome, moderation, ban-protection and AI chat bot setup from one place.
+              Configure welcome, moderation, ban-protection, AI chat, supporter roles and invite tracking from one place.
               Configure your Discord application, choose services and prepare a secure runtime deployment.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
@@ -116,7 +118,7 @@ export default function BotHostingPage() {
               <div><h2 className="font-bold text-white">Runtime status</h2><p className="text-xs text-gray-400">Hosting readiness checklist</p></div>
             </div>
             <div className="mt-5 space-y-3">
-              {[['Dashboard UI', 'Added to the website'], ['Discord bot worker', 'Needs a persistent Node.js runtime'], ['Secret storage', 'Set BOT_TOKEN server-side'], ['AI provider', 'Set AI API key server-side if AI is enabled']].map(([label, value]) => (
+              {[['Dashboard UI', 'Added to the website'], ['Discord bot worker', 'Worker source added; deploy as a persistent Node.js service'], ['Secret storage', 'Set DISCORD_BOT_TOKEN in worker host secrets'], ['AI provider', 'Optional AI_API_KEY and AI_MODEL in worker host secrets']].map(([label, value]) => (
                 <div key={label} className="flex items-start gap-3 rounded-xl bg-black/15 p-3">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-cyan-200" />
                   <div><p className="text-sm font-medium text-white">{label}</p><p className="text-xs text-gray-400">{value}</p></div>
@@ -133,7 +135,9 @@ export default function BotHostingPage() {
             <li>Create an application in the Discord Developer Portal and copy its Client ID.</li>
             <li>Enable the Guild Members intent for join events when required by your welcome flow.</li>
             <li>Use the minimum bot permissions each feature needs; do not grant Administrator by default.</li>
-            <li>Run the Discord Gateway bot in a persistent Node.js worker. A standard Vercel serverless page alone is not a long-running bot host.</li>
+            <li>Deploy the <code>bot-worker</code> folder as a persistent Node.js service using the included README and environment example. A standard Vercel serverless page alone is not a long-running bot host.</li>
+            <li>For supporter roles, set SUPPORTER_ROLE_ID and grant the bot Manage Roles only if needed; keep the bot role above the supporter role.</li>
+            <li>For invite tracking, grant the required invite visibility permission. Current counts are in-memory and reset after worker restart.</li>
             <li>Store BOT_TOKEN and AI provider keys as server-side environment secrets, never in client code or GitHub.</li>
           </ol>
         </section>}
