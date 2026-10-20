@@ -23,18 +23,7 @@ import { useAuth } from './AuthProvider';
 
 export default function BottomNav() {
   const path = usePathname();
-  const {
-    user,
-    appUser,
-    isOwner,
-    isActingOwner,
-    isAdmin,
-    isModerator,
-    isDeveloper,
-    isHelper,
-    isStaff,
-    isStaffLike,
-  } = useAuth();
+  const { user, appUser, role, isAdmin, isStaffLike } = useAuth();
 
   if (!user || path === '/login' || path.startsWith('/auth')) return null;
   if (path.startsWith('/messages/') && path !== '/messages') return null;
@@ -56,14 +45,16 @@ export default function BottomNav() {
     items.push({ href: '/panel/applications', label: 'Apply✓', icon: ClipboardCheck });
     items.push({ href: '/panel/reports', label: 'Reports', icon: Flag });
   }
-  if (isStaff) items.push({ href: '/panel/staff', label: 'Staff', icon: ClipboardList });
-  if (isHelper) items.push({ href: '/panel/helper', label: 'Helper', icon: HeartHandshake });
-  if (isDeveloper) items.push({ href: '/panel/developer', label: 'Dev', icon: Code2 });
-  if (isModerator) items.push({ href: '/panel/moderator', label: 'Mod', icon: Wrench });
+  // Role panels: only the exact role sees its own panel outside.
+  // Admin+ can open all of them from inside the Admin Panel.
+  if (role === 'staff') items.push({ href: '/panel/staff', label: 'Staff', icon: ClipboardList });
+  if (role === 'helper') items.push({ href: '/panel/helper', label: 'Helper', icon: HeartHandshake });
+  if (role === 'developer') items.push({ href: '/panel/developer', label: 'Dev', icon: Code2 });
+  if (role === 'moderator') items.push({ href: '/panel/moderator', label: 'Mod', icon: Wrench });
   if (isAdmin) items.push({ href: '/admin', label: 'Admin', icon: Shield });
-  if (isActingOwner && !isOwner)
+  if (role === 'acting_owner')
     items.push({ href: '/panel/acting-owner', label: 'A.Owner', icon: Star });
-  if (isOwner) items.push({ href: '/panel/owner', label: 'Owner', icon: Crown });
+  if (role === 'owner') items.push({ href: '/panel/owner', label: 'Owner', icon: Crown });
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-discord-dark/95 backdrop-blur-md">
