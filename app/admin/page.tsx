@@ -23,7 +23,7 @@ const ASSIGNABLE: SiteRole[] = [
 ];
 
 export default function AdminPage() {
-  const { isAdmin, isOwner, loading: authLoading, user, role, appUser } = useAuth();
+  const { isAdmin, isOwner, isActingOwner, isModerator, isDeveloper, isHelper, isStaff, loading: authLoading, user, role, appUser } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<Profile[]>([]);
   const [q, setQ] = useState('');
@@ -169,6 +169,21 @@ export default function AdminPage() {
             Rules
           </Link>
         </div>
+
+        <section className="mb-5 rounded-xl border border-white/10 bg-discord-card p-4">
+          <div className="mb-3">
+            <h2 className="text-sm font-bold text-white">Role Panels</h2>
+            <p className="mt-1 text-xs text-gray-400">Panel links are shown according to your assigned role and existing access permissions.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {isStaff && <Link href="/panel/staff" className="rounded-lg border border-sky-500/20 bg-sky-500/10 p-3 text-sm font-semibold text-sky-300 hover:bg-sky-500/20">Staff Panel</Link>}
+            {isHelper && <Link href="/panel/helper" className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/20">Helper Panel</Link>}
+            {isDeveloper && <Link href="/panel/developer" className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-3 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Developer Panel</Link>}
+            {isModerator && <Link href="/panel/moderator" className="rounded-lg border border-violet-500/20 bg-violet-500/10 p-3 text-sm font-semibold text-violet-300 hover:bg-violet-500/20">Moderator Panel</Link>}
+            {isActingOwner && <Link href="/panel/acting-owner" className="rounded-lg border border-orange-500/20 bg-orange-500/10 p-3 text-sm font-semibold text-orange-300 hover:bg-orange-500/20">Acting Owner Panel</Link>}
+            {isOwner && <Link href="/panel/owner" className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm font-semibold text-yellow-200 hover:bg-yellow-500/20">Owner Panel</Link>}
+          </div>
+        </section>
 
         {msg && (
           <div className="mb-3 rounded-lg border border-white/10 bg-discord-card px-3 py-2 text-sm text-white">
