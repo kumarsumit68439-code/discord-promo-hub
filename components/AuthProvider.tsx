@@ -16,14 +16,20 @@ import {
   AppUser,
   Profile,
 } from '@/lib/supabase';
-import { isAdminUser, isCurrentlyBanned } from '@/lib/admin';
+import { isOwnerBootstrap, isCurrentlyBanned } from '@/lib/admin';
+import { hasMinRole, SiteRole } from '@/lib/roles';
 import BanScreen from './BanScreen';
 
 type AuthCtx = {
   user: User | null;
   appUser: AppUser | null;
   profile: Profile | null;
+  role: SiteRole;
   isAdmin: boolean;
+  isOwner: boolean;
+  isModerator: boolean;
+  isDeveloper: boolean;
+  isHelper: boolean;
   loading: boolean;
   refreshProfile: () => Promise<void>;
   signInDiscord: () => Promise<void>;
@@ -44,6 +50,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await ensureProfile(u);
     const { data } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
     setProfile(data || null);
+
+    // Bootstrap owner role in DB if needed
+    if (
+      data &&
+      data.role !== 'owner' &&
+      isOwnerBootstrap({ email: u.email || data.email, discordId: au.discordId || data.discord_id })
+    ) {
+      await supabase.from('profiles').update({ role: 'owner' }).eq('id', u.id);
+      const { data: again } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
+      setProfile(again || data);
+    }
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -97,10 +114,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = '/login';
   }
 
-  const isAdmin = isAdminUser({
+  const bootstrapOwner = isOwnerBootstrap({
     email: user?.email || profile?.email,
     discordId: appUser?.discordId || profile?.discord_id,
   });
+
+  const role: SiteRole = bootstrapOwner
+    ? 'owner'
+    : ((profile?.role as SiteRole) || 'user');
+
+  const isOwner = hasMinRole(role, 'owner');
+  const isAdmin = hasMinRole(role, 'admin');
+  const isModerator = hasMinRole(role, 'moderator');
+  const isDeveloper = hasMinRole(role, 'developer');
+  const isHelper = hasMinRole(role, 'helper');
 
   const banned = profile ? isCurrentlyBanned(profile) : false;
 
@@ -110,7 +137,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         appUser,
         profile,
+        role,
         isAdmin,
+        isOwner,
+        isModerator,
+        isDeveloper,
+        isHelper,
         loading,
         refreshProfile,
         signInDiscord,

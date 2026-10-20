@@ -1,14 +1,25 @@
-/** Only these identities can access Admin Panel */
-export const ADMIN_EMAIL = 'sumitjilowa34@gmail.com';
-export const ADMIN_DISCORD_ID = '1487343086198853785';
+/** Bootstrap owners (always owner even before role column sync) */
+export const OWNER_EMAILS = ['sumitjilowa34@gmail.com', 'sumitk5730125@gmail.com'];
+export const OWNER_DISCORD_ID = '1487343086198853785';
 
-export function isAdminUser(opts: {
+export const ADMIN_EMAIL = 'sumitjilowa34@gmail.com';
+export const ADMIN_DISCORD_ID = OWNER_DISCORD_ID;
+
+export function isOwnerBootstrap(opts: {
   email?: string | null;
   discordId?: string | null;
 }): boolean {
   const email = (opts.email || '').toLowerCase().trim();
   const discordId = (opts.discordId || '').trim();
-  return email === ADMIN_EMAIL.toLowerCase() || discordId === ADMIN_DISCORD_ID;
+  return OWNER_EMAILS.includes(email) || discordId === OWNER_DISCORD_ID;
+}
+
+/** @deprecated use role from profile; kept for bootstrap */
+export function isAdminUser(opts: {
+  email?: string | null;
+  discordId?: string | null;
+}): boolean {
+  return isOwnerBootstrap(opts);
 }
 
 export type BanDuration = '1h' | '2h' | '24h' | 'permanent';
@@ -18,8 +29,7 @@ export function banUntilFromDuration(d: BanDuration): {
   is_permanent_ban: boolean;
 } {
   if (d === 'permanent') return { ban_until: null, is_permanent_ban: true };
-  const ms =
-    d === '1h' ? 3600_000 : d === '2h' ? 7200_000 : 24 * 3600_000;
+  const ms = d === '1h' ? 3600_000 : d === '2h' ? 7200_000 : 24 * 3600_000;
   return {
     ban_until: new Date(Date.now() + ms).toISOString(),
     is_permanent_ban: false,
@@ -35,15 +45,4 @@ export function isCurrentlyBanned(p: {
   if (p.is_permanent_ban) return true;
   if (!p.ban_until) return true;
   return new Date(p.ban_until).getTime() > Date.now();
-}
-
-export function banLabel(p: {
-  is_permanent_ban?: boolean | null;
-  ban_until?: string | null;
-}): string {
-  if (p.is_permanent_ban) return 'permanently';
-  if (p.ban_until) {
-    return `until ${new Date(p.ban_until).toLocaleString()}`;
-  }
-  return 'temporarily';
 }

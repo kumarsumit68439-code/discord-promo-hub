@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { SiteRole } from './roles';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -30,6 +31,7 @@ export type Profile = {
   discord_username: string | null;
   avatar_url: string | null;
   email: string | null;
+  role?: SiteRole | string | null;
   is_banned: boolean | null;
   is_permanent_ban: boolean | null;
   ban_until: string | null;
@@ -99,7 +101,6 @@ export function getDiscordProfile(user: {
   };
 }
 
-/** Create or refresh profile on every login (Discord + email) */
 export async function ensureProfile(user: {
   id: string;
   email?: string;
@@ -107,11 +108,9 @@ export async function ensureProfile(user: {
   identities?: Array<{ provider: string; id: string; identity_data?: Record<string, unknown> }>;
 }) {
   const au = getDiscordProfile(user);
-
-  // Don't wipe custom display_name if user already set one
   const { data: existing } = await supabase
     .from('profiles')
-    .select('display_name, bio')
+    .select('display_name, bio, role')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -128,8 +127,5 @@ export async function ensureProfile(user: {
     },
     { onConflict: 'id' }
   );
-
-  if (error) {
-    console.error('ensureProfile', error.message);
-  }
+  if (error) console.error('ensureProfile', error.message);
 }

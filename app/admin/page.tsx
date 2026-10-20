@@ -6,10 +6,13 @@ import { supabase, Profile } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
 import { BanDuration, banUntilFromDuration } from '@/lib/admin';
+import { ROLE_LABEL, ROLE_COLOR, SiteRole } from '@/lib/roles';
 import { Shield, Ban, Unlock, Search } from 'lucide-react';
 
+const ASSIGNABLE: SiteRole[] = ['user', 'helper', 'developer', 'moderator', 'admin', 'owner'];
+
 export default function AdminPage() {
-  const { isAdmin, loading: authLoading, user, appUser } = useAuth();
+  const { isAdmin, isOwner, loading: authLoading, user, role } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<Profile[]>([]);
   const [q, setQ] = useState('');
@@ -31,20 +34,13 @@ export default function AdminPage() {
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: false });
-    if (error) {
-      setMsg('Load error: ' + error.message);
-      setUsers([]);
-    } else {
-      setUsers(data || []);
-    }
+    if (error) setMsg('Load error: ' + error.message);
+    setUsers(data || []);
     setLoading(false);
   }
 
   async function banUser(id: string, duration: BanDuration, reason: string) {
-    if (id === user?.id) {
-      setMsg('You cannot ban yourself');
-      return;
-    }
+    if (id === user?.id) return setMsg('Cannot ban yourself');
     setBusy(id);
     setMsg(null);
     const { ban_until, is_permanent_ban } = banUntilFromDuration(duration);
@@ -55,11 +51,7 @@ export default function AdminPage() {
       until_ts: ban_until,
       reason: reason || 'Violation of rules',
     });
-    if (error) {
-      setMsg('Ban failed: ' + error.message);
-    } else {
-      setMsg(`User banned (${duration}) successfully`);
-    }
+    setMsg(error ? 'Ban failed: ' + error.message : `Banned (${duration})`);
     await loadUsers();
     setBusy(null);
   }
@@ -74,11 +66,19 @@ export default function AdminPage() {
       until_ts: null,
       reason: null,
     });
-    if (error) {
-      setMsg('Unban failed: ' + error.message);
-    } else {
-      setMsg('User unbanned successfully');
-    }
+    setMsg(error ? 'Unban failed: ' + error.message : 'Unbanned');
+    await loadUsers();
+    setBusy(null);
+  }
+
+  async function setRole(id: string, newRole: SiteRole) {
+    setBusy(id);
+    setMsg(null);
+    const { error } = await supabase.rpc('admin_set_role', {
+      target_id: id,
+      new_role: newRole,
+    });
+    setMsg(error ? 'Role failed: ' + error.message : `Role → ${ROLE_LABEL[newRole]}`);
     await loadUsers();
     setBusy(null);
   }
@@ -91,6 +91,7 @@ export default function AdminPage() {
       (u.discord_username || '').toLowerCase().includes(s) ||
       (u.email || '').toLowerCase().includes(s) ||
       (u.discord_id || '').includes(s) ||
+      (u.role || '').includes(s) ||
       u.id.includes(s)
     );
   });
@@ -100,7 +101,7 @@ export default function AdminPage() {
       <div className="min-h-screen bg-discord-darker">
         <SiteHeader />
         <p className="py-20 text-center text-gray-400">
-          {authLoading ? 'Loading...' : 'Admin access only'}
+          {authLoading ? 'Loading...' : 'Admin access only — role required'}
         </p>
       </div>
     );
@@ -117,8 +118,8 @@ export default function AdminPage() {
           <div>
             <h1 className="text-xl font-bold text-white">Admin Panel</h1>
             <p className="text-xs text-gray-400">
-              Logged in as {appUser?.username || user?.email} · Discord{' '}
-              {appUser?.discordId || '—'}
+              Your role: <span className="text-amber-400">{ROLE_LABEL[role]}</span> · Ban +
+              assign roles
             </p>
           </div>
         </div>
@@ -134,25 +135,18 @@ export default function AdminPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search name, email, Discord ID..."
+            placeholder="Search users..."
             className="w-full rounded-lg border border-white/10 bg-discord-card py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-discord-blurple"
           />
         </div>
 
         {loading ? (
-          <p className="text-gray-400">Loading users...</p>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/10 py-12 text-center">
-            <p className="text-gray-400">No other users yet</p>
-            <p className="mt-2 text-xs text-gray-500">
-              Jab koi naya user Discord/email se login karega, yahan dikhega.
-              Apne aap ko ban nahi kar sakte — ban buttons dusre users pe aate hain.
-            </p>
-          </div>
+          <p className="text-gray-400">Loading...</p>
         ) : (
           <div className="space-y-3">
             {filtered.map((u) => {
               const isSelf = u.id === user?.id;
+              const uRole = (u.role as SiteRole) || 'user';
               return (
                 <div key={u.id} className="rounded-xl border border-white/5 bg-discord-card p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -168,51 +162,71 @@ export default function AdminPage() {
                       <div>
                         <p className="font-semibold text-white">
                           {u.display_name || u.discord_username || 'User'}
-                          {isSelf && (
-                            <span className="ml-2 text-xs text-amber-400">(you)</span>
-                          )}
+                          {isSelf && <span className="ml-2 text-xs text-amber-400">(you)</span>}
                         </p>
                         <p className="text-xs text-gray-400">{u.email || 'No email'}</p>
-                        <p className="text-xs text-gray-500">
-                          Discord: {u.discord_id || '—'} · {u.id.slice(0, 8)}…
-                        </p>
+                        <span
+                          className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[uRole]}`}
+                        >
+                          {ROLE_LABEL[uRole]}
+                        </span>
                         {u.is_banned && (
                           <p className="mt-1 text-xs font-medium text-red-400">
                             BANNED {u.is_permanent_ban ? 'permanent' : u.ban_until || ''}
-                            {u.ban_reason ? ` — ${u.ban_reason}` : ''}
                           </p>
                         )}
                       </div>
                     </div>
 
                     {!isSelf && (
-                      <div className="flex flex-wrap gap-2">
-                        {u.is_banned ? (
-                          <button
-                            disabled={busy === u.id}
-                            onClick={() => unbanUser(u.id)}
-                            className="flex items-center gap-1 rounded-lg bg-discord-green/20 px-3 py-1.5 text-xs font-semibold text-discord-green disabled:opacity-50"
-                          >
-                            <Unlock className="h-3.5 w-3.5" /> Unban
-                          </button>
-                        ) : (
-                          (['1h', '2h', '24h', 'permanent'] as BanDuration[]).map((d) => (
+                      <div className="flex w-full flex-col gap-2 sm:w-auto">
+                        {/* Role assign */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] text-gray-500">Role:</span>
+                          {ASSIGNABLE.filter((r) => {
+                            if (r === 'owner' || r === 'admin') return isOwner;
+                            return true;
+                          }).map((r) => (
                             <button
-                              key={d}
-                              disabled={busy === u.id}
-                              onClick={() => {
-                                const reason =
-                                  window.prompt(`Ban reason (${d}):`, 'Violation of rules') ||
-                                  'Violation of rules';
-                                banUser(u.id, d, reason);
-                              }}
-                              className="rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-medium text-red-400 disabled:opacity-50"
+                              key={r}
+                              disabled={busy === u.id || uRole === r}
+                              onClick={() => setRole(u.id, r)}
+                              className={`rounded-md px-2 py-1 text-[10px] font-semibold disabled:opacity-40 ${ROLE_COLOR[r]}`}
                             >
-                              <Ban className="mr-1 inline h-3 w-3" />
-                              {d}
+                              {ROLE_LABEL[r]}
                             </button>
-                          ))
-                        )}
+                          ))}
+                        </div>
+
+                        {/* Ban */}
+                        <div className="flex flex-wrap gap-2">
+                          {u.is_banned ? (
+                            <button
+                              disabled={busy === u.id}
+                              onClick={() => unbanUser(u.id)}
+                              className="flex items-center gap-1 rounded-lg bg-discord-green/20 px-3 py-1.5 text-xs font-semibold text-discord-green"
+                            >
+                              <Unlock className="h-3.5 w-3.5" /> Unban
+                            </button>
+                          ) : (
+                            (['1h', '2h', '24h', 'permanent'] as BanDuration[]).map((d) => (
+                              <button
+                                key={d}
+                                disabled={busy === u.id}
+                                onClick={() => {
+                                  const reason =
+                                    window.prompt(`Ban reason (${d}):`, 'Violation of rules') ||
+                                    'Violation of rules';
+                                  banUser(u.id, d, reason);
+                                }}
+                                className="rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-medium text-red-400"
+                              >
+                                <Ban className="mr-1 inline h-3 w-3" />
+                                {d}
+                              </button>
+                            ))
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
