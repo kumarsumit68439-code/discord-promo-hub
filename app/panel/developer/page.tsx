@@ -7,14 +7,14 @@ import SiteHeader from '@/components/SiteHeader';
 import { Code2 } from 'lucide-react';
 
 export default function DeveloperPanel() {
-  const { isDeveloper, loading } = useAuth();
+  const { isDeveloper, isAdmin, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !isDeveloper) router.replace('/');
-  }, [loading, isDeveloper, router]);
+    if (!loading && !isDeveloper && !isAdmin) router.replace('/');
+  }, [loading, isDeveloper, isAdmin, router]);
 
-  if (loading || !isDeveloper) {
+  if (loading || (!isDeveloper && !isAdmin)) {
     return (
       <div className="min-h-screen bg-discord-darker">
         <SiteHeader />
