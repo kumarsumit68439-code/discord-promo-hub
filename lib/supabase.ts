@@ -20,32 +20,55 @@ export type Listing = {
   discord_avatar: string | null;
 };
 
+export type Profile = {
+  id: string;
+  display_name: string | null;
+  bio: string | null;
+  discord_id: string | null;
+  discord_username: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AppUser = {
   id: string;
   email?: string;
   username: string;
   avatarUrl: string | null;
   fullName: string | null;
+  discordId: string | null;
 };
 
-/** Extract Discord profile from Supabase user metadata */
 export function getDiscordProfile(user: {
   id: string;
   email?: string;
   user_metadata?: Record<string, unknown>;
+  identities?: Array<{ provider: string; id: string; identity_data?: Record<string, unknown> }>;
 }): AppUser {
   const meta = user.user_metadata || {};
+  const discordIdentity = user.identities?.find((i) => i.provider === 'discord');
+  const identityData = discordIdentity?.identity_data || {};
+
   const username =
+    (meta.custom_claims as { global_name?: string })?.global_name ||
     (meta.full_name as string) ||
     (meta.name as string) ||
     (meta.preferred_username as string) ||
-    (meta.custom_claims as { global_name?: string })?.global_name ||
+    (identityData.full_name as string) ||
     user.email?.split('@')[0] ||
     'Discord User';
 
   const avatarUrl =
     (meta.avatar_url as string) ||
     (meta.picture as string) ||
+    (identityData.avatar_url as string) ||
+    null;
+
+  const discordId =
+    (meta.provider_id as string) ||
+    discordIdentity?.id ||
+    (identityData.sub as string) ||
     null;
 
   return {
@@ -54,5 +77,6 @@ export function getDiscordProfile(user: {
     username,
     avatarUrl,
     fullName: (meta.full_name as string) || null,
+    discordId,
   };
 }

@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { MusicPlayerProvider } from '@/components/MusicPlayerContext';
+import MiniPlayer from '@/components/MiniPlayer';
 
 export const metadata: Metadata = {
-  title: 'Discord Promo Hub | Promote Your Server & Website',
-  description: 'Free platform to promote Discord servers and websites. Grow your community today!',
-  keywords: ['discord', 'promotion', 'server', 'advertise', 'community'],
+  title: 'Discord Promo Hub | Promote · Music · Profile',
+  description:
+    'Promote Discord servers & websites, edit your profile, and stream YouTube music.',
+  keywords: ['discord', 'promotion', 'youtube', 'music', 'community'],
 };
 
 export default function RootLayout({
@@ -14,7 +17,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        <MusicPlayerProvider>
+          {children}
+          <MiniPlayer />
+        </MusicPlayerProvider>
+      </body>
     </html>
   );
 }
