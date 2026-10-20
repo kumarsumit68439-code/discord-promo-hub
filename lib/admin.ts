@@ -2,6 +2,10 @@
 export const OWNER_EMAILS = ['sumitjilowa34@gmail.com', 'sumitk5730125@gmail.com'];
 export const OWNER_DISCORD_ID = '1487343086198853785';
 
+/** These accounts can NEVER be banned by anyone */
+export const PROTECTED_EMAILS = ['sumitjilowa34@gmail.com'];
+export const PROTECTED_DISCORD_IDS = ['1487343086198853785'];
+
 export const ADMIN_EMAIL = 'sumitjilowa34@gmail.com';
 export const ADMIN_DISCORD_ID = OWNER_DISCORD_ID;
 
@@ -12,6 +16,15 @@ export function isOwnerBootstrap(opts: {
   const email = (opts.email || '').toLowerCase().trim();
   const discordId = (opts.discordId || '').trim();
   return OWNER_EMAILS.includes(email) || discordId === OWNER_DISCORD_ID;
+}
+
+export function isProtectedAccount(opts: {
+  email?: string | null;
+  discordId?: string | null;
+}): boolean {
+  const email = (opts.email || '').toLowerCase().trim();
+  const discordId = (opts.discordId || '').trim();
+  return PROTECTED_EMAILS.includes(email) || PROTECTED_DISCORD_IDS.includes(discordId);
 }
 
 /** @deprecated use role from profile; kept for bootstrap */
