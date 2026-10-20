@@ -1,8 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase, Listing } from '@/lib/supabase';
-import { MessageCircle, Globe, Plus, ExternalLink, Search, Filter, X, Server, Link2 } from 'lucide-react';
+import { supabase, Listing, AppUser, getDiscordProfile } from '@/lib/supabase';
+import {
+  MessageCircle,
+  Globe,
+  Plus,
+  ExternalLink,
+  Search,
+  Filter,
+  X,
+  Server,
+  Link2,
+  LogOut,
+  Trash2,
+} from 'lucide-react';
+import type { User } from '@supabase/supabase-js';
 
 export default function Home() {
   const [listings, setListings] = useState<Listing[]>([]);
@@ -11,6 +24,9 @@ export default function Home() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<AppUser | null>(null);
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -21,7 +37,24 @@ export default function Home() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
+    // Load session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setProfile(session?.user ? getDiscordProfile(session.user) : null);
+      setAuthLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setProfile(session?.user ? getDiscordProfile(session.user) : null);
+      setAuthLoading(false);
+    });
+
     fetchListings();
+
+    return () => subscription.unsubscribe();
   }, []);
 
   async function fetchListings() {
@@ -38,8 +71,36 @@ export default function Home() {
     setLoading(false);
   }
 
+  async function signInWithDiscord() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'discord',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        scopes: 'identify email',
+      },
+    });
+    if (error) alert(error.message);
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    setShowForm(false);
+  }
+
+  function openPromote() {
+    if (!user) {
+      signInWithDiscord();
+      return;
+    }
+    setShowForm(true);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!user || !profile) {
+      signInWithDiscord();
+      return;
+    }
     if (!form.title.trim() || !form.url.trim()) return;
 
     setSubmitting(true);
@@ -54,6 +115,9 @@ export default function Home() {
       type: form.type,
       url: form.url.trim(),
       tags,
+      user_id: user.id,
+      discord_username: profile.username,
+      discord_avatar: profile.avatarUrl,
     });
 
     setSubmitting(false);
@@ -66,7 +130,17 @@ export default function Home() {
         fetchListings();
       }, 1500);
     } else {
-      alert('Error submitting. Please try again.');
+      alert(error.message || 'Error submitting. Please try again.');
+    }
+  }
+
+  async function deleteListing(id: string) {
+    if (!confirm('Delete this listing?')) return;
+    const { error } = await supabase.from('listings').delete().eq('id', id);
+    if (!error) {
+      setListings((prev) => prev.filter((l) => l.id !== id));
+    } else {
+      alert(error.message);
     }
   }
 
@@ -94,13 +168,57 @@ export default function Home() {
               <p className="text-xs text-gray-400">Discord & Website Ads</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 rounded-lg bg-discord-blurple px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#4752c4]"
-          >
-            <Plus className="h-4 w-4" />
-            Promote
-          </button>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            {!authLoading && (
+              <>
+                {user && profile ? (
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="hidden items-center gap-2 rounded-lg bg-discord-card px-2.5 py-1.5 sm:flex">
+                      {profile.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={profile.avatarUrl}
+                          alt=""
+                          className="h-7 w-7 rounded-full"
+                        />
+                      ) : (
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-discord-blurple text-xs font-bold text-white">
+                          {profile.username[0]?.toUpperCase()}
+                        </div>
+                      )}
+                      <span className="max-w-[120px] truncate text-sm text-gray-200">
+                        {profile.username}
+                      </span>
+                    </div>
+                    <button
+                      onClick={signOut}
+                      title="Logout"
+                      className="rounded-lg p-2 text-gray-400 transition hover:bg-discord-card hover:text-white"
+                    >
+                      <LogOut className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={signInWithDiscord}
+                    className="flex items-center gap-2 rounded-lg border border-white/10 bg-discord-card px-3 py-2 text-sm font-medium text-white transition hover:bg-discord-hover"
+                  >
+                    <MessageCircle className="h-4 w-4 text-discord-blurple" />
+                    <span className="hidden sm:inline">Login with Discord</span>
+                    <span className="sm:hidden">Login</span>
+                  </button>
+                )}
+              </>
+            )}
+            <button
+              onClick={openPromote}
+              className="flex items-center gap-2 rounded-lg bg-discord-blurple px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#4752c4] sm:px-4 sm:py-2.5"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Promote</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -113,13 +231,22 @@ export default function Home() {
           </h2>
           <p className="mx-auto max-w-xl text-gray-400">
             Free platform for Discord users to advertise their servers and websites.
-            Grow your community today!
+            Login with Discord to post.
           </p>
+          {!user && !authLoading && (
+            <button
+              onClick={signInWithDiscord}
+              className="mt-5 inline-flex items-center gap-2 rounded-lg bg-discord-blurple px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#4752c4]"
+            >
+              <MessageCircle className="h-5 w-5" />
+              Login with Discord
+            </button>
+          )}
         </section>
 
         {/* Filters */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1 max-w-md">
+          <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
             <input
               type="text"
@@ -158,64 +285,95 @@ export default function Home() {
             <Filter className="mx-auto mb-3 h-10 w-10 text-gray-600" />
             <p className="text-gray-400">No listings found. Be the first to promote!</p>
             <button
-              onClick={() => setShowForm(true)}
+              onClick={openPromote}
               className="mt-4 rounded-lg bg-discord-blurple px-5 py-2 text-sm font-semibold text-white hover:bg-[#4752c4]"
             >
-              Add Listing
+              {user ? 'Add Listing' : 'Login to Promote'}
             </button>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((listing) => (
-              <a
+              <div
                 key={listing.id}
-                href={listing.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex flex-col rounded-xl border border-white/5 bg-discord-card p-5 transition hover:border-discord-blurple/40 hover:bg-discord-hover"
+                className="group relative flex flex-col rounded-xl border border-white/5 bg-discord-card p-5 transition hover:border-discord-blurple/40 hover:bg-discord-hover"
               >
-                <div className="mb-3 flex items-start justify-between">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                      listing.type === 'discord'
-                        ? 'bg-discord-blurple/20 text-discord-blurple'
-                        : 'bg-emerald-500/20 text-emerald-400'
-                    }`}
+                {user && listing.user_id === user.id && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      deleteListing(listing.id);
+                    }}
+                    className="absolute right-3 top-3 rounded-lg p-1.5 text-gray-600 opacity-0 transition hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"
+                    title="Delete"
                   >
-                    {listing.type === 'discord' ? (
-                      <Server className="h-5 w-5" />
-                    ) : (
-                      <Globe className="h-5 w-5" />
-                    )}
-                  </div>
-                  <ExternalLink className="h-4 w-4 text-gray-600 transition group-hover:text-discord-blurple" />
-                </div>
-                <h3 className="mb-1 font-semibold text-white group-hover:text-discord-blurple">
-                  {listing.title}
-                </h3>
-                {listing.description && (
-                  <p className="mb-3 line-clamp-2 text-sm text-gray-400">{listing.description}</p>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 )}
-                <div className="mt-auto flex flex-wrap gap-1.5">
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      listing.type === 'discord'
-                        ? 'bg-discord-blurple/15 text-discord-blurple'
-                        : 'bg-emerald-500/15 text-emerald-400'
-                    }`}
-                  >
-                    {listing.type === 'discord' ? 'Discord' : 'Website'}
-                  </span>
-                  {listing.tags?.slice(0, 3).map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full bg-white/5 px-2.5 py-0.5 text-xs text-gray-400"
+                <a
+                  href={listing.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-1 flex-col"
+                >
+                  <div className="mb-3 flex items-start justify-between">
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                        listing.type === 'discord'
+                          ? 'bg-discord-blurple/20 text-discord-blurple'
+                          : 'bg-emerald-500/20 text-emerald-400'
+                      }`}
                     >
-                      {tag}
+                      {listing.type === 'discord' ? (
+                        <Server className="h-5 w-5" />
+                      ) : (
+                        <Globe className="h-5 w-5" />
+                      )}
+                    </div>
+                    <ExternalLink className="h-4 w-4 text-gray-600 transition group-hover:text-discord-blurple" />
+                  </div>
+                  <h3 className="mb-1 font-semibold text-white group-hover:text-discord-blurple">
+                    {listing.title}
+                  </h3>
+                  {listing.description && (
+                    <p className="mb-3 line-clamp-2 text-sm text-gray-400">{listing.description}</p>
+                  )}
+                  <div className="mt-auto flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        listing.type === 'discord'
+                          ? 'bg-discord-blurple/15 text-discord-blurple'
+                          : 'bg-emerald-500/15 text-emerald-400'
+                      }`}
+                    >
+                      {listing.type === 'discord' ? 'Discord' : 'Website'}
                     </span>
-                  ))}
-                </div>
-              </a>
+                    {listing.tags?.slice(0, 2).map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full bg-white/5 px-2.5 py-0.5 text-xs text-gray-400"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  {listing.discord_username && (
+                    <div className="mt-3 flex items-center gap-2 border-t border-white/5 pt-3">
+                      {listing.discord_avatar ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={listing.discord_avatar}
+                          alt=""
+                          className="h-5 w-5 rounded-full"
+                        />
+                      ) : (
+                        <div className="h-5 w-5 rounded-full bg-discord-blurple/40" />
+                      )}
+                      <span className="text-xs text-gray-500">{listing.discord_username}</span>
+                    </div>
+                  )}
+                </a>
+              </div>
             ))}
           </div>
         )}
@@ -227,7 +385,7 @@ export default function Home() {
       </footer>
 
       {/* Modal Form */}
-      {showForm && (
+      {showForm && user && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-discord-dark p-6 shadow-2xl">
             <div className="mb-5 flex items-center justify-between">
@@ -240,6 +398,16 @@ export default function Home() {
               </button>
             </div>
 
+            {profile && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-discord-card px-3 py-2">
+                {profile.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={profile.avatarUrl} alt="" className="h-6 w-6 rounded-full" />
+                ) : null}
+                <span className="text-sm text-gray-300">Posting as {profile.username}</span>
+              </div>
+            )}
+
             {success ? (
               <div className="py-10 text-center">
                 <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-discord-green/20">
@@ -250,7 +418,6 @@ export default function Home() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Type selector */}
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -301,9 +468,7 @@ export default function Home() {
                       value={form.url}
                       onChange={(e) => setForm({ ...form, url: e.target.value })}
                       placeholder={
-                        form.type === 'discord'
-                          ? 'https://discord.gg/...'
-                          : 'https://example.com'
+                        form.type === 'discord' ? 'https://discord.gg/...' : 'https://example.com'
                       }
                       className="w-full rounded-lg border border-white/10 bg-discord-card py-2.5 pl-10 pr-3 text-sm text-white placeholder-gray-500 outline-none focus:border-discord-blurple"
                     />
@@ -311,9 +476,7 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-300">
-                    Description
-                  </label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-300">Description</label>
                   <textarea
                     value={form.description}
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
