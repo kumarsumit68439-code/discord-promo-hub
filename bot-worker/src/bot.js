@@ -4,6 +4,15 @@ const {
 } = require('discord.js');
 const { renderWelcomeCard } = require('./welcome-card');
 
+// Replace {user} {username} {server} {count} in custom welcome/goodbye text.
+function fillTemplate(tpl, member) {
+  return String(tpl)
+    .replace(/\{user\}/g, String(member))
+    .replace(/\{username\}/g, member.user ? member.user.username : 'member')
+    .replace(/\{server\}/g, member.guild.name)
+    .replace(/\{count\}/g, String(member.guild.memberCount));
+}
+
 // One factory = one Discord bot. Used for both the single env-configured bot and for
 // every bot hosted from the website (multi-tenant mode).
 function createBot({ token, clientId, config = {}, label = clientId }) {
@@ -111,9 +120,11 @@ function createBot({ token, clientId, config = {}, label = clientId }) {
     if (has('welcome') && config.welcomeChannelId) {
       const channel = await member.guild.channels.fetch(config.welcomeChannelId).catch(() => null);
       if (channel?.isTextBased()) {
+        const title = fillTemplate(config.welcomeTitle || 'Welcome to {server}!', member).slice(0, 256);
+        const desc = fillTemplate(config.welcomeMessage || 'Welcome {user}! You are member **#{count}**.', member).slice(0, 4000);
         const embed = new EmbedBuilder().setColor(0x5865f2)
-          .setTitle('Welcome to ' + member.guild.name + '!')
-          .setDescription('Welcome ' + member + '! You are member **#' + member.guild.memberCount + '**.')
+          .setTitle(title)
+          .setDescription(desc)
           .setTimestamp();
         if (has('invite')) embed.addFields({ name: 'Invited by', value: inviterId ? '<@' + inviterId + '>' : 'Unknown / vanity invite', inline: true });
         const payload = { content: '' + member, embeds: [embed] };
@@ -133,7 +144,10 @@ function createBot({ token, clientId, config = {}, label = clientId }) {
     if (!has('welcome') || !config.welcomeChannelId) return;
     if (config.guildId && member.guild.id !== config.guildId) return;
     const ch = await member.guild.channels.fetch(config.welcomeChannelId).catch(() => null);
-    if (ch?.isTextBased()) await ch.send('Goodbye **' + member.user.tag + '**.').catch(() => null);
+    if (ch?.isTextBased()) {
+      const text = fillTemplate(config.goodbyeMessage || 'Goodbye **{username}**.', member).slice(0, 1900);
+      await ch.send(text).catch(() => null);
+    }
   });
 
   client.on('messageCreate', async message => {
