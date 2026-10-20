@@ -94,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setAppUser(null);
     setProfile(null);
+    window.location.href = '/login';
   }
 
   const isAdmin = isAdminUser({
@@ -123,7 +124,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           banUntil={profile?.ban_until}
           onLogout={signOut}
           onTryOtherLogin={async () => {
-            await signOut();
+            await supabase.auth.signOut();
+            setUser(null);
+            setAppUser(null);
+            setProfile(null);
             window.location.href = '/login';
           }}
         />

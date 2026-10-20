@@ -7,9 +7,10 @@ import { useAuth } from './AuthProvider';
 
 export default function BottomNav() {
   const path = usePathname();
-  const { appUser } = useAuth();
+  const { user, appUser } = useAuth();
 
-  // Hide on chat conversation (more screen space)
+  // Hide on login and deep chat
+  if (!user || path === '/login' || path.startsWith('/auth')) return null;
   if (path.startsWith('/messages/') && path !== '/messages') return null;
 
   const items = [
