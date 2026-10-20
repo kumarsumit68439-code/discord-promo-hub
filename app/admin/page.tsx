@@ -1,5 +1,16 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { supabase, Profile } from '@/lib/supabase';
+import { useAuth } from '@/components/AuthProvider';
+import { ROLE_LABEL, ROLE_COLOR, SiteRole } from '@/lib/roles';
+import { isProtectedAccount, banUntilFromDuration, BanDuration } from '@/lib/admin';
+import { BADGE_OPTIONS, badgeEmoji } from '@/lib/badges';
+import SiteHeader from '@/components/SiteHeader';
+import { Search, Shield, CheckCircle2, Unlock, Ban } from 'lucide-react';
+
 const PANEL_LINKS = [
   { href: '/panel/staff', label: 'Staff Panel', color: 'bg-sky-500/15 text-sky-300' },
   { href: '/panel/helper', label: 'Helper Panel', color: 'bg-emerald-500/15 text-emerald-300' },
@@ -154,6 +165,23 @@ export default function AdminPage() {
             </p>
           </div>
         </div>
+
+        <section className="mb-5">
+          <h2 className="mb-2 text-sm font-semibold text-gray-200">Role panels</h2>
+          <p className="mb-3 text-xs text-gray-500">All panels are listed here for Admin review. Outside this page, each panel link is shown only to users with its assigned role.</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {PANEL_LINKS.map((panel) => (
+              <Link
+                key={panel.href}
+                href={panel.href}
+                className={`flex items-center justify-between rounded-xl border border-white/10 bg-discord-card p-3 transition hover:border-white/20 hover:bg-discord-hover ${panel.color}`}
+              >
+                <span className="font-semibold">{panel.label}</span>
+                <span aria-hidden="true">→</span>
+              </Link>
+            ))}
+          </div>
+        </section>
 
         <div className="mb-4 flex flex-wrap gap-2 text-xs">
           <Link href="/panel/applications" className="rounded-lg bg-indigo-500/20 px-3 py-2 text-indigo-300">
