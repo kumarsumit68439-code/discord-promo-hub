@@ -9,7 +9,7 @@ type Props = {
 };
 
 export default function SiteHeader({ onPromote }: Props) {
-  const { appUser, loading, signOut, user } = useAuth();
+  const { appUser, loading, signOut, user, isAdmin, isOwner, isActingOwner, isModerator, isDeveloper, isHelper, isStaff } = useAuth();
 
   if (!user) return null;
 
@@ -65,6 +65,17 @@ export default function SiteHeader({ onPromote }: Props) {
           )}
         </div>
       </div>
+      {(isAdmin || isOwner || isActingOwner || isModerator || isDeveloper || isHelper || isStaff) && (
+        <nav aria-label="Role panels" className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-3 pb-2">
+          {isStaff && <Link href="/panel/staff" className="shrink-0 rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/20">Staff Panel</Link>}
+          {isHelper && <Link href="/panel/helper" className="shrink-0 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20">Helper Panel</Link>}
+          {isDeveloper && <Link href="/panel/developer" className="shrink-0 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20">Developer Panel</Link>}
+          {isModerator && <Link href="/panel/moderator" className="shrink-0 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-300 hover:bg-violet-500/20">Moderator Panel</Link>}
+          {isActingOwner && <Link href="/panel/acting-owner" className="shrink-0 rounded-lg border border-orange-500/20 bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-300 hover:bg-orange-500/20">Acting Owner</Link>}
+          {isOwner && <Link href="/panel/owner" className="shrink-0 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3 py-1.5 text-xs font-semibold text-yellow-200 hover:bg-yellow-500/20">Owner Panel</Link>}
+          {isAdmin && <Link href="/admin" className="shrink-0 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20">Admin Panel</Link>}
+        </nav>
+      )}
     </header>
   );
 }
