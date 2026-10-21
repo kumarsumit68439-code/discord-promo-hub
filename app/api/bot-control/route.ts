@@ -20,6 +20,9 @@ export async function POST(req: Request) {
     title?: string;
     query?: string;
     text?: string;
+    thumbnail?: string;
+    artist?: string;
+    channelName?: string;
   };
   try {
     body = await req.json();
@@ -106,6 +109,9 @@ export async function POST(req: Request) {
     if (body.title) payload.title = String(body.title).slice(0, 200);
     if (body.query) payload.query = String(body.query).slice(0, 200);
     if (body.text) payload.text = String(body.text).slice(0, 1800);
+    if (body.thumbnail) payload.thumbnail = String(body.thumbnail).slice(0, 500);
+    if (body.artist || body.channelName) payload.channel = String(body.artist || body.channelName).slice(0, 120);
+    payload.by = 'website';
 
     if (action === 'music_play' && !payload.url && !payload.query) {
       return NextResponse.json({ error: 'Song URL or query required' }, { status: 400 });
