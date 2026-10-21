@@ -45,6 +45,12 @@ type AuthCtx = {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
+function readAdminPanelUntil(p: Profile | null): string | null {
+  if (!p) return null;
+  const v = p.admin_panel_until;
+  return typeof v === 'string' && v.length > 0 ? v : null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
@@ -59,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAppUser(au);
       await ensureProfile(u);
       const { data } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
-      setProfile(data || null);
+      setProfile((data as Profile | null) || null);
 
       if (
         data &&
@@ -68,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ) {
         await supabase.from('profiles').update({ role: 'owner' }).eq('id', u.id);
         const { data: again } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
-        setProfile(again || data);
+        setProfile((again as Profile | null) || (data as Profile));
       }
     } catch (e) {
       console.error('loadProfile', e);
@@ -94,16 +100,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadAppLock();
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      const u = session?.user ?? null;
-      setUser(u);
-      if (u) await loadProfile(u);
-      else {
-        setAppUser(null);
-        setProfile(null);
-      }
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    supabase.auth
+      .getSession()
+      .then(async ({ data: { session } }) => {
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) await loadProfile(u);
+        else {
+          setAppUser(null);
+          setProfile(null);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
 
     const {
       data: { subscription },
@@ -146,8 +155,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const role: SiteRole = bootstrapOwner ? 'owner' : ((profile?.role as SiteRole) || 'user');
 
-  const adminUntil = profile?.admin_panel_until ? new Date(profile.admin_panel_until) : null;
-  const isBoughtAdmin = Boolean(adminUntil && adminUntil.getTime() > Date.now());
+  const adminUntilStr = readAdminPanelUntil(profile);
+  const adminUntil = adminUntilStr ? new Date(adminUntilStr) : null;
+  const isBoughtAdmin = Boolean(adminUntil && !Number.isNaN(adminUntil.getTime()) && adminUntil.getTime() > Date.now());
 
   const isOwner = role === 'owner';
   const isActingOwner = role === 'acting_owner' || role === 'owner';
