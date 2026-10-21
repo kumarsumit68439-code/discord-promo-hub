@@ -13,6 +13,8 @@ import {
   Users,
   Music2,
   Terminal,
+  LayoutGrid,
+  Settings2,
 } from 'lucide-react';
 
 export const HOSTING_MODULES = [
@@ -33,6 +35,20 @@ export const HOSTING_MODULES = [
     title: 'Support Bot',
     icon: LifeBuoy,
     detail: '/help and FAQ replies in a support channel. Free.',
+  },
+  {
+    id: 'channelbuilder',
+    title: 'Channel & VC Builder',
+    icon: LayoutGrid,
+    detail:
+      'Builds full server layout (categories, text, voice) like a real community server. /setup-server or /setup-ai with a prompt. Only Client ID + Token + Server ID. Needs Administrator.',
+  },
+  {
+    id: 'serversetup',
+    title: 'Server Setup (Roles)',
+    icon: Settings2,
+    detail:
+      'Creates roles (Owner, Admin, Mod, VIP, Member, Bot) and can run full setup. /setup-roles · /setup-full. Administrator only. No channel IDs.',
   },
   {
     id: 'ticket',

@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 const { createBot } = require('./bot');
+const setupBuilder = require('./setup-builder');
 
 const AI_BASE = { groq: 'https://api.groq.com/openai/v1', xai: 'https://api.x.ai/v1' };
 const SYNC_MS = 30_000;
@@ -16,7 +17,8 @@ const FLAG_CONTENT_LIMITED = 1 << 19;
 
 function friendlyError(raw) {
   const m = String(raw || '');
-  if (/disallowed intents/i.test(m)) return 'Privileged intents off. Discord Developer Portal > Bot: enable Server Members Intent (+ Message Content for AI/ticket/levels), Save.';
+  if (/disallowed intents/i.test(m))
+    return 'Privileged intents off. Discord Developer Portal > Bot: enable Server Members Intent (+ Message Content for AI/ticket/levels), Save.';
   if (/invalid token|TokenInvalid/i.test(m)) return 'Invalid bot token. Reset in Developer Portal and save again.';
   return m;
 }
@@ -28,10 +30,14 @@ function friendlyTestError(err) {
   return String((err && err.message) || err || 'unknown').slice(0, 250);
 }
 
-async function tryEnableIntents(row, hasAi) {
+async function tryEnableIntents(row) {
   const mods = row.modules || [];
-  const needMembers = mods.some((m) => ['welcome', 'invite', 'supporter', 'levels', 'memberadd', 'security', 'tokenclaim', 'moderation'].includes(m));
-  const needContent = mods.some((m) => ['ai', 'support', 'levels', 'protect', 'ticket', 'tokenclaim', 'security'].includes(m));
+  const needMembers = mods.some((m) =>
+    ['welcome', 'invite', 'supporter', 'levels', 'memberadd', 'security', 'tokenclaim', 'moderation', 'serversetup', 'channelbuilder'].includes(m)
+  );
+  const needContent = mods.some((m) =>
+    ['ai', 'support', 'levels', 'protect', 'ticket', 'tokenclaim', 'security'].includes(m)
+  );
   const headers = { Authorization: 'Bot ' + row.token, 'Content-Type': 'application/json' };
   const api = 'https://discord.com/api/v10/applications/@me';
   try {
@@ -53,9 +59,8 @@ async function tryEnableIntents(row, hasAi) {
   }
 }
 
-async function checkConfig(client, row, hasAi) {
+async function checkConfig(client, row) {
   const c = row.config || {};
-  const mods = row.modules || [];
   const guilds = [...client.guilds.cache.values()].filter((g) => !c.guildId || g.id === c.guildId);
   if (!guilds.length) {
     return c.guildId
@@ -128,7 +133,7 @@ async function runHosted() {
     const firstTime = row.status !== 'online';
     config.onReady = async () => {
       try {
-        entry.problem = await checkConfig(entry.bot.client, row, entry.hasAi);
+        entry.problem = await checkConfig(entry.bot.client, row);
         await report(row.id, entry.problem);
         if (firstTime) await announce(entry);
       } catch (err) {
@@ -140,21 +145,34 @@ async function runHosted() {
       clientId: row.client_id,
       config,
       label: row.client_id,
-      onVoiceState: (state) => { void saveVoiceState(row.id, state); },
+      onVoiceState: (state) => {
+        void saveVoiceState(row.id, state);
+      },
       onXp: async ({ guildId, userId, xp, level, username }) => {
         try {
-          await db.from('bot_levels').upsert({
-            bot_id: row.id,
-            guild_id: guildId,
-            user_id: userId,
-            username,
-            xp,
-            level,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'bot_id,guild_id,user_id' });
+          await db.from('bot_levels').upsert(
+            {
+              bot_id: row.id,
+              guild_id: guildId,
+              user_id: userId,
+              username,
+              xp,
+              level,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'bot_id,guild_id,user_id' }
+          );
         } catch (_) {}
       },
     });
+
+    // Attach channel/role setup modules (no channel IDs required)
+    try {
+      setupBuilder.attach(entry.bot.client, row);
+    } catch (e) {
+      console.error('[' + row.client_id + '] setup attach', e.message);
+    }
+
     running.set(row.id, entry);
     try {
       await entry.bot.start();
@@ -162,7 +180,7 @@ async function runHosted() {
       console.error('[' + row.client_id + '] login failed:', err.message);
       running.delete(row.id);
       await entry.bot.stop();
-      if (allowAutoFix && /disallowed intents/i.test(err.message) && await tryEnableIntents(row, entry.hasAi)) {
+      if (allowAutoFix && /disallowed intents/i.test(err.message) && (await tryEnableIntents(row))) {
         await new Promise((r) => setTimeout(r, 3000));
         return startBot(row, false);
       }
@@ -206,7 +224,7 @@ async function runHosted() {
     for (const [id, entry] of running) {
       if (!entry.bot.client.isReady()) continue;
       try {
-        entry.problem = await checkConfig(entry.bot.client, entry.row, entry.hasAi);
+        entry.problem = await checkConfig(entry.bot.client, entry.row);
       } catch (err) {
         console.error('config check', err.message);
       }
@@ -254,9 +272,7 @@ async function runHosted() {
         .eq('status', 'pending')
         .order('created_at', { ascending: true })
         .limit(20);
-      if (error) {
-        return;
-      }
+      if (error) return;
       for (const cmd of data || []) {
         const entry = running.get(cmd.bot_id);
         let result = '';
