@@ -7,6 +7,7 @@ import { supabase, Profile, Listing } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
 import ReportButton from '@/components/ReportButton';
+import PremiumBadge from '@/components/PremiumBadge';
 import { badgeEmoji, badgeLabel } from '@/lib/badges';
 import { ROLE_LABEL, ROLE_COLOR, SiteRole } from '@/lib/roles';
 import { UserPlus, UserMinus, MessageSquare, Users, CheckCircle2 } from 'lucide-react';
@@ -96,11 +97,25 @@ export default function UserProfilePage() {
     <div className="min-h-screen bg-discord-darker pb-24">
       <SiteHeader />
       <main className="mx-auto max-w-2xl px-4 py-8">
-        <div className="rounded-2xl border border-white/5 bg-discord-card p-6">
+        <div
+          className={
+            'rounded-2xl border p-6 ' +
+            (profile.is_premium && profile.premium_until && new Date(profile.premium_until) > new Date()
+              ? 'border-amber-400/30 bg-gradient-to-br from-amber-500/10 via-discord-card to-discord-card shadow-[0_0_40px_rgba(251,191,36,0.08)]'
+              : 'border-white/5 bg-discord-card')
+          }
+        >
           <div className="flex flex-wrap items-start gap-4">
             {profile.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={profile.avatar_url} alt="" className="h-20 w-20 rounded-full" />
+              <img
+                src={profile.avatar_url}
+                alt=""
+                className={
+                  'h-20 w-20 rounded-full ' +
+                  (profile.is_premium ? 'ring-2 ring-amber-400/60 ring-offset-2 ring-offset-discord-card' : '')
+                }
+              />
             ) : (
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-discord-blurple text-2xl font-bold text-white">
                 {name[0]}
@@ -113,7 +128,13 @@ export default function UserProfilePage() {
                   <CheckCircle2 className="h-5 w-5 text-sky-400" aria-label="Verified" />
                 )}
               </h1>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <PremiumBadge
+                  is_premium={profile.is_premium}
+                  premium_until={profile.premium_until}
+                  size="md"
+                  showUntil
+                />
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[uRole]}`}>
                   {ROLE_LABEL[uRole]}
                 </span>
@@ -145,9 +166,7 @@ export default function UserProfilePage() {
                 <button
                   onClick={toggleFollow}
                   className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold ${
-                    isFollowing
-                      ? 'bg-white/10 text-white'
-                      : 'bg-discord-blurple text-white'
+                    isFollowing ? 'bg-white/10 text-white' : 'bg-discord-blurple text-white'
                   }`}
                 >
                   {isFollowing ? (
