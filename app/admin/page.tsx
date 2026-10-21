@@ -30,10 +30,13 @@ const ASSIGNABLE: SiteRole[] = [
   'owner',
 ];
 
+const PREMIUM_GIFT_DAYS = [7, 30, 90, 365];
+
 export default function AdminPage() {
   const { isAdmin, isOwner, loading: authLoading, user, role, appUser } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<Profile[]>([]);
+  const [premium, setPremium] = useState<Record<string, string>>({});
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -44,7 +47,10 @@ export default function AdminPage() {
   }, [authLoading, isAdmin, router]);
 
   useEffect(() => {
-    if (isAdmin) loadUsers();
+    if (isAdmin) {
+      loadUsers();
+      loadPremium();
+    }
   }, [isAdmin]);
 
   async function loadUsers() {
@@ -56,6 +62,37 @@ export default function AdminPage() {
     if (error) setMsg('Load error: ' + error.message);
     setUsers(data || []);
     setLoading(false);
+  }
+
+  async function loadPremium() {
+    const { data, error } = await supabase.rpc('admin_list_premium');
+    if (error) {
+      setMsg('Premium list error: ' + error.message);
+      return;
+    }
+    const map: Record<string, string> = {};
+    ((data as Array<{ user_id: string; premium_until: string }> | null) || []).forEach((r) => {
+      map[r.user_id] = r.premium_until;
+    });
+    setPremium(map);
+  }
+
+  async function grantPremium(id: string, days: number) {
+    setBusy(id);
+    setMsg(null);
+    const { data, error } = await supabase.rpc('admin_grant_premium', {
+      target_id: id,
+      p_days: days,
+    });
+    if (error) {
+      setMsg('Premium failed: ' + error.message);
+    } else if (days === 0) {
+      setMsg('Premium removed');
+    } else {
+      setMsg(`✅ Premium free di — valid till ${new Date(String(data)).toLocaleDateString()}`);
+    }
+    await loadPremium();
+    setBusy(null);
   }
 
   async function banUser(id: string, duration: BanDuration, reason: string) {
@@ -223,6 +260,7 @@ export default function AdminPage() {
                 discordId: u.discord_id,
               });
               const badges = u.badges || [];
+              const premiumUntil = premium[u.id];
 
               return (
                 <div key={u.id} className="rounded-xl border border-white/10 bg-discord-card p-4">
@@ -257,6 +295,11 @@ export default function AdminPage() {
                       <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLOR[uRole]}`}>
                         {ROLE_LABEL[uRole]}
                       </span>
+                      {premiumUntil && (
+                        <span className="ml-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                          Premium
+                        </span>
+                      )}
                       {protectedUser && (
                         <span className="ml-1 rounded-full bg-yellow-500/20 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
                           Protected
@@ -292,6 +335,43 @@ export default function AdminPage() {
                               {ROLE_LABEL[r]}
                             </button>
                           ))}
+                        </div>
+                      </div>
+
+                      {/* PREMIUM — free gift by admin */}
+                      <div>
+                        <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-emerald-400/90">
+                          Premium plan · Free gift
+                        </p>
+                        <p className="mb-1.5 text-[11px] text-gray-400">
+                          {premiumUntil
+                            ? `Premium active till ${new Date(premiumUntil).toLocaleDateString()}`
+                            : 'Free plan'}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {PREMIUM_GIFT_DAYS.map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              disabled={busy === u.id}
+                              onClick={() => grantPremium(u.id, d)}
+                              className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-bold text-emerald-300 disabled:opacity-40"
+                            >
+                              +{d} days
+                            </button>
+                          ))}
+                          {premiumUntil && (
+                            <button
+                              type="button"
+                              disabled={busy === u.id}
+                              onClick={() => {
+                                if (window.confirm('Is user ka premium hata dein?')) grantPremium(u.id, 0);
+                              }}
+                              className="rounded-lg border border-red-400/30 bg-red-500/10 px-2.5 py-1.5 text-[11px] font-bold text-red-300 disabled:opacity-40"
+                            >
+                              Remove premium
+                            </button>
+                          )}
                         </div>
                       </div>
 
