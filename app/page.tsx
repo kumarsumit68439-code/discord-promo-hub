@@ -9,18 +9,11 @@ import {
   Globe,
   ExternalLink,
   Search,
-  Filter,
   X,
   Server,
-  Bot,
   Link2,
   Trash2,
-  Users,
-  MessagesSquare,
-  Music2,
-  User,
   UserCircle2,
-  Crown,
   Star,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -55,7 +48,6 @@ export default function Home() {
       .eq('is_active', true)
       .order('created_at', { ascending: false });
     if (!error && data) setListings(data);
-    // Premium users get high promotion: their listings are shown first with a badge.
     const { data: prem } = await supabase.rpc('premium_user_ids');
     setPremiumIds(new Set(((prem || []) as Array<{ user_id: string }>).map((r) => r.user_id)));
     setLoading(false);
@@ -124,192 +116,151 @@ export default function Home() {
     })
     .sort((a, b) => Number(isPremium(b)) - Number(isPremium(a)));
 
-  const quick = [
-    { href: '/users', label: 'Search users', icon: Users, desc: 'Find & check accounts' },
-    { href: '/messages', label: 'Messages', icon: MessagesSquare, desc: 'Realtime chat' },
-    { href: '/music', label: 'Music', icon: Music2, desc: 'YouTube player' },
-    { href: '/profile', label: 'Profile', icon: User, desc: 'Edit & Discord check' },
-    { href: '/hosting', label: 'Bot Hosting', icon: Bot, desc: 'Ticket, voice, protection, level, welcome & more bots' },
-    { href: '/pricing', label: 'Plans', icon: Crown, desc: 'Free ya Premium ₹20: high promotion' },
-  ];
-
   return (
-    <div className="min-h-screen bg-discord-darker pb-20 sm:pb-8">
+    <div className="min-h-screen bg-[#17181c] pb-20 sm:pb-8">
       <SiteHeader onPromote={openPromote} />
 
-      <main className="mx-auto max-w-6xl px-4 py-8">
-        <section className="mb-8 text-center">
-          <h2 className="mb-3 text-3xl font-extrabold text-white sm:text-4xl">
-            Promote Your <span className="text-discord-blurple">Discord Server</span> & Website
-          </h2>
-          <p className="mx-auto max-w-xl text-gray-400">
-            Public promos · har card pe link + publisher profile check
-          </p>
-        </section>
-
-        <div className="mb-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {quick.map((q) => (
-            <Link
-              key={q.href}
-              href={q.href}
-              className="rounded-xl border border-white/5 bg-discord-card p-4 transition hover:border-discord-blurple/40 hover:bg-discord-hover"
-            >
-              <q.icon className="mb-2 h-5 w-5 text-discord-blurple" />
-              <p className="text-sm font-semibold text-white">{q.label}</p>
-              <p className="text-xs text-gray-500">{q.desc}</p>
-            </Link>
-          ))}
-        </div>
-
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative max-w-md flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-            <input
-              type="text"
-              placeholder="Search public listings..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-discord-card py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-discord-blurple"
-            />
+      <main className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-lg font-semibold text-white">Listings</h1>
+            <p className="text-[12px] text-[#6d6f78]">Public Discord & website promos</p>
           </div>
-          <div className="flex gap-2">
-            {(['all', 'discord', 'website'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`rounded-lg px-4 py-2 text-sm font-medium ${
-                  filter === f ? 'bg-discord-blurple text-white' : 'bg-discord-card text-gray-400'
-                }`}
-              >
-                {f === 'all' ? 'All' : f === 'discord' ? 'Discord' : 'Website'}
-              </button>
-            ))}
+          <div className="flex flex-1 flex-col gap-2 sm:max-w-md sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6d6f78]" />
+              <input
+                type="text"
+                placeholder="Search…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-md border border-white/[0.06] bg-[#1e1f22] py-2 pl-8 pr-3 text-[13px] text-white outline-none placeholder:text-[#6d6f78] focus:border-[#5865f2]/50"
+              />
+            </div>
+            <div className="flex gap-1">
+              {(['all', 'discord', 'website'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium ${
+                    filter === f
+                      ? 'bg-[#5865f2] text-white'
+                      : 'bg-[#2b2d31] text-[#b5bac1] hover:bg-[#35373c]'
+                  }`}
+                >
+                  {f === 'all' ? 'All' : f === 'discord' ? 'Discord' : 'Sites'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {loading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-48 animate-pulse rounded-xl bg-discord-card" />
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-20 animate-pulse rounded-lg bg-[#2b2d31]/80" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/10 py-16 text-center">
-            <Filter className="mx-auto mb-3 h-10 w-10 text-gray-600" />
-            <p className="text-gray-400">No public listings yet</p>
+          <div className="rounded-lg border border-dashed border-white/10 py-14 text-center">
+            <p className="text-[14px] text-[#949ba4]">Abhi koi listing nahi</p>
             <button
               onClick={openPromote}
-              className="mt-4 rounded-lg bg-discord-blurple px-5 py-2 text-sm font-semibold text-white"
+              className="mt-3 rounded-md bg-[#5865f2] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#4752c4]"
             >
-              {user ? 'Publish' : 'Login to publish'}
+              {user ? 'Pehli post daalo' : 'Login karke post karo'}
             </button>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-2">
             {filtered.map((listing) => (
               <div
                 key={listing.id}
-                className={`relative flex flex-col rounded-xl border bg-discord-card p-5 hover:border-discord-blurple/40 ${
-                  isPremium(listing) ? 'border-amber-300/40 shadow-[0_0_24px_rgba(251,191,36,0.08)]' : 'border-white/5'
+                className={`relative flex gap-3 rounded-lg border bg-[#2b2d31] p-3.5 transition hover:border-white/10 ${
+                  isPremium(listing)
+                    ? 'border-amber-400/25'
+                    : 'border-white/[0.04]'
                 }`}
               >
                 {isPremium(listing) && (
-                  <span className="absolute -top-2.5 left-4 inline-flex items-center gap-1 rounded-full bg-amber-300 px-2.5 py-0.5 text-[10px] font-bold text-black">
-                    <Star className="h-3 w-3" /> PREMIUM
+                  <span className="absolute -top-2 left-3 inline-flex items-center gap-0.5 rounded bg-amber-400/90 px-1.5 py-0.5 text-[10px] font-semibold text-black">
+                    <Star className="h-2.5 w-2.5" /> boost
                   </span>
                 )}
                 {user && listing.user_id === user.id && (
                   <button
                     type="button"
                     onClick={() => deleteListing(listing.id)}
-                    className="absolute right-3 top-3 z-10 text-gray-600 hover:text-red-400"
+                    className="absolute right-2 top-2 text-[#6d6f78] hover:text-red-400"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 )}
 
-                {/* Type icon + title */}
-                <div className="mb-3 flex items-start gap-3">
-                  <div
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${
-                      listing.type === 'discord'
-                        ? 'bg-discord-blurple/20 text-discord-blurple'
-                        : 'bg-emerald-500/20 text-emerald-400'
-                    }`}
-                  >
-                    {listing.type === 'discord' ? (
-                      <Server className="h-5 w-5" />
-                    ) : (
-                      <Globe className="h-5 w-5" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-white">{listing.title}</h3>
-                    <p className="text-[11px] capitalize text-gray-500">{listing.type} promo</p>
-                  </div>
+                <div
+                  className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${
+                    listing.type === 'discord'
+                      ? 'bg-[#5865f2]/15 text-[#949cf7]'
+                      : 'bg-emerald-500/15 text-emerald-400'
+                  }`}
+                >
+                  {listing.type === 'discord' ? (
+                    <Server className="h-5 w-5" />
+                  ) : (
+                    <Globe className="h-5 w-5" />
+                  )}
                 </div>
 
-                {listing.description && (
-                  <p className="mb-3 line-clamp-2 text-sm text-gray-400">{listing.description}</p>
-                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <h3 className="text-[14px] font-medium text-white">{listing.title}</h3>
+                    <span className="text-[11px] capitalize text-[#6d6f78]">{listing.type}</span>
+                  </div>
+                  {listing.description && (
+                    <p className="mt-0.5 line-clamp-2 text-[13px] text-[#949ba4]">{listing.description}</p>
+                  )}
 
-                {/* Publisher row */}
-                {(listing.discord_username || listing.user_id) && (
-                  <div className="mb-3 flex items-center gap-2 border-t border-white/5 pt-3">
-                    {listing.discord_avatar ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={listing.discord_avatar}
-                        alt=""
-                        className="h-7 w-7 rounded-full"
-                      />
-                    ) : (
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-discord-blurple text-[10px] font-bold text-white">
-                        {(listing.discord_username || '?')[0]}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {(listing.discord_username || listing.user_id) && (
+                      <div className="flex items-center gap-1.5">
+                        {listing.discord_avatar ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={listing.discord_avatar} alt="" className="h-5 w-5 rounded-full" />
+                        ) : (
+                          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#5865f2] text-[9px] font-bold text-white">
+                            {(listing.discord_username || '?')[0]}
+                          </div>
+                        )}
+                        <span className="text-[12px] text-[#6d6f78]">
+                          {listing.discord_username || 'user'}
+                        </span>
                       </div>
                     )}
-                    <span className="truncate text-xs text-gray-400">
-                      {listing.discord_username || 'Publisher'}
-                    </span>
+
+                    <div className="ml-auto flex gap-1.5">
+                      <a
+                        href={listing.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-white ${
+                          listing.type === 'discord'
+                            ? 'bg-[#5865f2] hover:bg-[#4752c4]'
+                            : 'bg-emerald-600 hover:bg-emerald-500'
+                        }`}
+                      >
+                        {listing.type === 'discord' ? 'Join' : 'Open'}
+                        <ExternalLink className="h-3 w-3 opacity-70" />
+                      </a>
+                      {listing.user_id ? (
+                        <Link
+                          href={`/u/${listing.user_id}`}
+                          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[12px] font-medium text-[#dbdee1] hover:bg-white/[0.06]"
+                        >
+                          <UserCircle2 className="h-3.5 w-3.5" /> Profile
+                        </Link>
+                      ) : null}
+                    </div>
                   </div>
-                )}
-
-                {/* Action buttons: Open link + Profile check */}
-                <div className="mt-auto flex gap-2 pt-1">
-                  <a
-                    href={listing.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-bold text-white ${
-                      listing.type === 'discord'
-                        ? 'bg-discord-blurple hover:bg-[#4752c4]'
-                        : 'bg-emerald-600 hover:bg-emerald-500'
-                    }`}
-                  >
-                    {listing.type === 'discord' ? (
-                      <>
-                        <Server className="h-3.5 w-3.5" /> Open Discord
-                      </>
-                    ) : (
-                      <>
-                        <Globe className="h-3.5 w-3.5" /> Open Website
-                      </>
-                    )}
-                    <ExternalLink className="h-3 w-3 opacity-80" />
-                  </a>
-
-                  {listing.user_id ? (
-                    <Link
-                      href={`/u/${listing.user_id}`}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 py-2.5 text-xs font-bold text-white hover:bg-white/10"
-                    >
-                      <UserCircle2 className="h-3.5 w-3.5" /> Profile check
-                    </Link>
-                  ) : (
-                    <span className="flex flex-1 items-center justify-center rounded-lg border border-white/5 py-2.5 text-xs text-gray-600">
-                      No profile
-                    </span>
-                  )}
                 </div>
               </div>
             ))}
@@ -320,26 +271,26 @@ export default function Home() {
       <SiteFooter />
 
       {showForm && user && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-discord-dark p-6">
-            <div className="mb-4 flex justify-between">
-              <h3 className="font-bold text-white">Publish (public)</h3>
-              <button type="button" onClick={() => setShowForm(false)}>
-                <X className="h-5 w-5 text-gray-400" />
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
+          <div className="w-full max-w-md rounded-t-xl border border-white/10 bg-[#1e1f22] p-5 sm:rounded-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-[15px] font-semibold text-white">New post</h3>
+              <button type="button" onClick={() => setShowForm(false)} className="text-[#949ba4] hover:text-white">
+                <X className="h-5 w-5" />
               </button>
             </div>
             {success ? (
-              <p className="py-8 text-center text-discord-green">Live! Card pe link + profile check</p>
+              <p className="py-8 text-center text-[14px] text-[#23a55a]">Posted.</p>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
                     onClick={() => setForm({ ...form, type: 'discord' })}
-                    className={`rounded-lg border py-2 text-sm ${
+                    className={`rounded-md border py-2 text-[13px] ${
                       form.type === 'discord'
-                        ? 'border-discord-blurple text-discord-blurple'
-                        : 'border-white/10 text-gray-400'
+                        ? 'border-[#5865f2] bg-[#5865f2]/10 text-[#949cf7]'
+                        : 'border-white/10 text-[#949ba4]'
                     }`}
                   >
                     Discord
@@ -347,10 +298,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setForm({ ...form, type: 'website' })}
-                    className={`rounded-lg border py-2 text-sm ${
+                    className={`rounded-md border py-2 text-[13px] ${
                       form.type === 'website'
-                        ? 'border-emerald-500 text-emerald-400'
-                        : 'border-white/10 text-gray-400'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                        : 'border-white/10 text-[#949ba4]'
                     }`}
                   >
                     Website
@@ -361,36 +312,34 @@ export default function Home() {
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   placeholder="Title"
-                  className="w-full rounded-lg border border-white/10 bg-discord-card px-3 py-2.5 text-sm text-white"
+                  className="w-full rounded-md border border-white/10 bg-[#2b2d31] px-3 py-2.5 text-[13px] text-white outline-none focus:border-[#5865f2]/50"
                 />
                 <div className="relative">
-                  <Link2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                  <Link2 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6d6f78]" />
                   <input
                     required
                     type="url"
                     value={form.url}
                     onChange={(e) => setForm({ ...form, url: e.target.value })}
                     placeholder={
-                      form.type === 'discord'
-                        ? 'https://discord.gg/...'
-                        : 'https://yoursite.com'
+                      form.type === 'discord' ? 'https://discord.gg/…' : 'https://…'
                     }
-                    className="w-full rounded-lg border border-white/10 bg-discord-card py-2.5 pl-10 pr-3 text-sm text-white"
+                    className="w-full rounded-md border border-white/10 bg-[#2b2d31] py-2.5 pl-9 pr-3 text-[13px] text-white outline-none focus:border-[#5865f2]/50"
                   />
                 </div>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={2}
-                  placeholder="Description"
-                  className="w-full rounded-lg border border-white/10 bg-discord-card px-3 py-2.5 text-sm text-white"
+                  placeholder="Short description (optional)"
+                  className="w-full rounded-md border border-white/10 bg-[#2b2d31] px-3 py-2.5 text-[13px] text-white outline-none focus:border-[#5865f2]/50"
                 />
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full rounded-lg bg-discord-blurple py-3 text-sm font-semibold text-white"
+                  className="w-full rounded-md bg-[#5865f2] py-2.5 text-[13px] font-medium text-white hover:bg-[#4752c4] disabled:opacity-60"
                 >
-                  {submitting ? '...' : 'Publish'}
+                  {submitting ? '…' : 'Post'}
                 </button>
               </form>
             )}
