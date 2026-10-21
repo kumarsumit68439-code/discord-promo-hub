@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { authFetch } from '@/lib/api';
 import {
@@ -197,11 +197,14 @@ function MusicControl({ bot }: { bot: BotRow }) {
           action: 'music_play',
           url,
           title: hit.title,
+          query: hit.title,
+          thumbnail: hit.thumbnail,
+          artist: hit.channel,
           channelId: String(cfg.musicChannelId || ''),
         },
         'bot'
       );
-      setNote(String(msg));
+      setNote('Sent to Discord: ' + String(msg));
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Play failed');
     } finally {
@@ -228,7 +231,8 @@ function MusicControl({ bot }: { bot: BotRow }) {
         <Music2 className="h-4 w-4" /> Music control
       </p>
       <p className="mt-1 text-xs text-gray-400">
-        Search → Play sends the track to your Discord music channel (bot plays / announces).
+        Search → click a song or <b>Send to Discord</b>. Bot posts a mini player (Resume / Pause / Skip / Stop) in your
+        music channel. Set <b>Voice channel ID</b> on the bot for real audio in VC.
       </p>
       <div className="mt-2 flex gap-2">
         <input
@@ -265,6 +269,13 @@ function MusicControl({ bot }: { bot: BotRow }) {
       )}
 
       <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          disabled={busy || !current}
+          className={btn + ' border-fuchsia-400/40 bg-fuchsia-500/20'}
+          onClick={() => current && void play(current)}
+        >
+          <Send className="h-3.5 w-3.5" /> Send to Discord
+        </button>
         <button disabled={busy} className={btn} onClick={() => void ctrl('music_pause')}>
           <Pause className="h-3.5 w-3.5" /> Pause
         </button>
@@ -300,7 +311,7 @@ function MusicControl({ bot }: { bot: BotRow }) {
                   <span className="block truncate text-xs font-medium text-white">{h.title}</span>
                   <span className="block truncate text-[10px] text-gray-500">{h.channel}</span>
                 </span>
-                <Play className="h-3.5 w-3.5 shrink-0 text-fuchsia-300" />
+                <span className="shrink-0 text-[10px] font-bold text-fuchsia-300">Send</span>
               </button>
             </li>
           ))}
