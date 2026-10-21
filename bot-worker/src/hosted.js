@@ -36,7 +36,7 @@ async function tryEnableIntents(row) {
     ['welcome', 'invite', 'supporter', 'levels', 'memberadd', 'security', 'tokenclaim', 'moderation', 'serversetup', 'channelbuilder'].includes(m)
   );
   const needContent = mods.some((m) =>
-    ['ai', 'support', 'levels', 'protect', 'ticket', 'tokenclaim', 'security'].includes(m)
+    ['ai', 'support', 'levels', 'protect', 'ticket', 'tokenclaim', 'security', 'music', 'simple'].includes(m)
   );
   const headers = { Authorization: 'Bot ' + row.token, 'Content-Type': 'application/json' };
   const api = 'https://discord.com/api/v10/applications/@me';
@@ -166,7 +166,6 @@ async function runHosted() {
       },
     });
 
-    // Attach channel/role setup modules (no channel IDs required)
     try {
       setupBuilder.attach(entry.bot.client, row);
     } catch (e) {
@@ -199,7 +198,8 @@ async function runHosted() {
       console.error('Sync failed:', error.message);
       return;
     }
-    const wanted = new Map((data || []).map((r) => [r.id, r]));
+    const rows = Array.isArray(data) ? data : [];
+    const wanted = new Map(rows.map((r) => [r.id, r]));
     for (const [id, entry] of running) {
       const row = wanted.get(id);
       if (!row || row.updated_at !== entry.updated_at) {
@@ -307,11 +307,124 @@ async function runHosted() {
     }
   }
 
+  let botCmdBusy = false;
+  async function processBotCommands() {
+    if (botCmdBusy) return;
+    botCmdBusy = true;
+    try {
+      const { data, error } = await db
+        .from('bot_commands')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(20);
+      if (error) return;
+      for (const cmd of data || []) {
+        const entry = running.get(cmd.bot_id);
+        let result = '';
+        let status = 'done';
+        try {
+          if (!entry || !entry.bot.client.isReady()) {
+            status = 'error';
+            result = 'Bot offline';
+          } else {
+            const b = entry.bot;
+            const client = b.client;
+            const action = cmd.action;
+            const payload = cmd.payload || {};
+            const channelId =
+              cmd.channel_id ||
+              entry.row.config?.musicChannelId ||
+              entry.row.config?.welcomeChannelId ||
+              '';
+
+            if (action === 'music_play') {
+              const url = String(payload.url || payload.query || '');
+              if (typeof b.play === 'function') result = await b.play(url, channelId);
+              else if (typeof b.playTrack === 'function') result = await b.playTrack(url, channelId);
+              else if (typeof b.musicPlay === 'function') result = await b.musicPlay(url, channelId);
+              else if (channelId) {
+                const ch = await client.channels.fetch(channelId).catch(() => null);
+                if (ch && ch.isTextBased && ch.isTextBased()) {
+                  const title = payload.title || url;
+                  await ch.send({
+                    content:
+                      '🎵 **Now playing (Promo Hub control)**\n' +
+                      title +
+                      (url ? '\n' + url : ''),
+                  });
+                  result = 'Sent to music channel';
+                } else {
+                  status = 'error';
+                  result = 'Music channel not found';
+                }
+              } else {
+                status = 'error';
+                result = 'No music channel';
+              }
+            } else if (action === 'music_skip') {
+              result =
+                typeof b.skip === 'function'
+                  ? await b.skip()
+                  : typeof b.musicSkip === 'function'
+                    ? await b.musicSkip()
+                    : 'Skip queued';
+            } else if (action === 'music_pause') {
+              result =
+                typeof b.pause === 'function'
+                  ? await b.pause()
+                  : typeof b.musicPause === 'function'
+                    ? await b.musicPause()
+                    : 'Pause queued';
+            } else if (action === 'music_resume') {
+              result =
+                typeof b.resume === 'function'
+                  ? await b.resume()
+                  : typeof b.musicResume === 'function'
+                    ? await b.musicResume()
+                    : 'Resume queued';
+            } else if (action === 'music_stop') {
+              if (typeof b.stop === 'function') result = await b.stop();
+              else if (typeof b.musicStop === 'function') result = await b.musicStop();
+              else if (typeof b.leaveVoice === 'function') result = await b.leaveVoice();
+              else result = 'Stop queued';
+            } else if (action === 'announce') {
+              const text = String(payload.text || '').slice(0, 1800);
+              const ch = await client.channels
+                .fetch(channelId || entry.row.config?.modLogChannelId)
+                .catch(() => null);
+              if (ch && ch.isTextBased && ch.isTextBased() && text) {
+                await ch.send(text);
+                result = 'Sent';
+              } else {
+                status = 'error';
+                result = 'Channel missing';
+              }
+            } else {
+              status = 'error';
+              result = 'Unknown action: ' + action;
+            }
+          }
+        } catch (err) {
+          status = 'error';
+          result = (err && err.message) || 'failed';
+        }
+        await db
+          .from('bot_commands')
+          .update({ status, result: String(result).slice(0, 400), done_at: new Date().toISOString() })
+          .eq('id', cmd.id);
+      }
+    } finally {
+      botCmdBusy = false;
+    }
+  }
+
   await sync();
   setInterval(() => sync().catch((e) => console.error('sync', e.message)), SYNC_MS);
   setInterval(() => heartbeat().catch(() => null), HEARTBEAT_MS);
   setInterval(() => processTestRequests().catch((e) => console.error('test', e.message)), TEST_POLL_MS);
   setInterval(() => processVoiceCommands().catch((e) => console.error('voice', e.message)), VOICE_POLL_MS);
+  setInterval(() => processBotCommands().catch((e) => console.error('botcmd', e.message)), 4000);
   console.log('Hosted mode running. Bots:', running.size);
 }
 
