@@ -5,13 +5,10 @@ import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
 import BotProviderSettings from '@/components/BotProviderSettings';
 import HostedBots from '@/components/HostedBots';
-import YouTubeKeySettings from '@/components/YouTubeKeySettings';
-import { useAuth } from '@/components/AuthProvider';
 import { Server, ShieldCheck, ExternalLink, Settings2, TerminalSquare } from 'lucide-react';
 
 export default function BotHostingPage() {
   const [showSetup, setShowSetup] = useState(false);
-  const { isAdmin } = useAuth();
 
   return (
     <div className="min-h-screen bg-discord-darker pb-24">
@@ -29,7 +26,7 @@ export default function BotHostingPage() {
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <a href="#bot-form" className="rounded-xl bg-discord-blurple px-5 py-3 text-sm font-bold text-white transition hover:brightness-110">Add a bot</a>
-              <button onClick={() => setShowSetup((v) => !v)} className="rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10">
+              <button type="button" onClick={() => setShowSetup((v) => !v)} className="rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10">
                 <Settings2 className="mr-2 inline h-4 w-4" /> Setup guide
               </button>
             </div>
@@ -49,22 +46,22 @@ export default function BotHostingPage() {
           </div>
         </section>
 
-        {showSetup && <section className="mt-6 rounded-2xl border border-white/10 bg-discord-card p-5 sm:p-6">
-          <h2 className="flex items-center gap-2 font-bold text-white"><TerminalSquare className="h-5 w-5 text-discord-blurple" /> Setup checklist</h2>
-          <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-gray-300">
-            <li>Create an application in the Discord Developer Portal, copy the Client ID and reset/copy the Bot Token.</li>
-            <li>Enable Server Members Intent (welcome, invite) and Message Content Intent (AI chat).</li>
-            <li>Paste Client ID and token above, choose modules, write your welcome message and press Verify token &amp; host bot.</li>
-            <li>Use Invite bot to server, then put the bot role above any role it must give.</li>
-            <li>Run the <code>bot-worker</code> service so the bot goes online.</li>
-          </ol>
-        </section>}
-
-        {isAdmin && <YouTubeKeySettings />}
+        {showSetup && (
+          <section className="mt-6 rounded-2xl border border-white/10 bg-discord-card p-5 sm:p-6">
+            <h2 className="flex items-center gap-2 font-bold text-white"><TerminalSquare className="h-5 w-5 text-discord-blurple" /> Setup checklist</h2>
+            <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-gray-300">
+              <li>Create an application in the Discord Developer Portal, copy the Client ID and reset/copy the Bot Token.</li>
+              <li>Enable Server Members Intent (welcome, invite) and Message Content Intent (AI chat).</li>
+              <li>Paste Client ID and token above, choose modules, write your welcome message and press Verify token &amp; host bot.</li>
+              <li>Use Invite bot to server, then put the bot role above any role it must give.</li>
+              <li>Run the <code>bot-worker</code> service so the bot goes online.</li>
+            </ol>
+          </section>
+        )}
 
         <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
           <p className="text-sm font-semibold text-white">Permissions &amp; safety</p>
-          <p className="mt-2 text-sm leading-6 text-gray-400">Bots can only moderate members when the server owner grants the relevant permissions and Discord's role hierarchy allows the action.</p>
+          <p className="mt-2 text-sm leading-6 text-gray-400">Bots can only moderate members when the server owner grants the relevant permissions and Discord&apos;s role hierarchy allows the action.</p>
           <a className="mt-3 inline-flex items-center gap-2 text-sm text-indigo-300 hover:text-indigo-200" href="https://discord.com/developers/docs/topics/permissions" target="_blank" rel="noreferrer">Discord permissions documentation <ExternalLink className="h-4 w-4" /></a>
         </section>
         <BotProviderSettings />
