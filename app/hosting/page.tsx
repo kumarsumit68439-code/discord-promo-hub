@@ -5,10 +5,13 @@ import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
 import BotProviderSettings from '@/components/BotProviderSettings';
 import HostedBots from '@/components/HostedBots';
+import YouTubeKeySettings from '@/components/YouTubeKeySettings';
+import { useAuth } from '@/components/AuthProvider';
 import { Server, ShieldCheck, ExternalLink, Settings2, TerminalSquare } from 'lucide-react';
 
 export default function BotHostingPage() {
   const [showSetup, setShowSetup] = useState(false);
+  const { isAdmin } = useAuth();
 
   return (
     <div className="min-h-screen bg-discord-darker pb-24">
@@ -56,6 +59,8 @@ export default function BotHostingPage() {
             <li>Run the <code>bot-worker</code> service so the bot goes online.</li>
           </ol>
         </section>}
+
+        {isAdmin && <YouTubeKeySettings />}
 
         <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
           <p className="text-sm font-semibold text-white">Permissions &amp; safety</p>

@@ -3,70 +3,31 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// The YouTube API key lives in Supabase Vault. This route forwards the search to the
+// `youtube-search` Supabase Edge Function, which reads the key server-side.
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim();
-  const maxResults = Math.min(Number(req.nextUrl.searchParams.get('max') || 12), 25);
+  const max = Math.min(Number(req.nextUrl.searchParams.get('max') || 12), 25);
 
   if (!q) {
     return NextResponse.json({ error: 'Missing query q' }, { status: 400 });
   }
 
-  const key =
-    process.env.YOUTUBE_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.YT_API_KEY ||
-    '';
-
-  if (!key) {
-    return NextResponse.json(
-      {
-        error:
-          'YOUTUBE_API_KEY not configured on server. Set it in Vercel → Project → Settings → Environment Variables, then Redeploy.',
-      },
-      { status: 503 }
-    );
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!base || !anon) {
+    return NextResponse.json({ error: 'Supabase is not configured on the server.' }, { status: 503 });
   }
 
-  const url = new URL('https://www.googleapis.com/youtube/v3/search');
-  url.searchParams.set('part', 'snippet');
-  url.searchParams.set('type', 'video');
-  url.searchParams.set('maxResults', String(maxResults));
-  url.searchParams.set('q', q);
-  url.searchParams.set('key', key);
-
   try {
-    const res = await fetch(url.toString(), { cache: 'no-store' });
-    const data = await res.json();
-
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: data?.error?.message || 'YouTube API error' },
-        { status: res.status }
-      );
-    }
-
-    const items = (data.items || []).map(
-      (item: {
-        id: { videoId: string };
-        snippet: {
-          title: string;
-          channelTitle: string;
-          thumbnails: { medium?: { url: string }; default?: { url: string } };
-          publishedAt: string;
-        };
-      }) => ({
-        id: item.id.videoId,
-        title: item.snippet.title,
-        channel: item.snippet.channelTitle,
-        thumbnail:
-          item.snippet.thumbnails.medium?.url ||
-          item.snippet.thumbnails.default?.url ||
-          '',
-        publishedAt: item.snippet.publishedAt,
-      })
-    );
-
-    return NextResponse.json({ items });
+    const res = await fetch(base + '/functions/v1/youtube-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: anon, Authorization: 'Bearer ' + anon },
+      body: JSON.stringify({ action: 'search', q, max }),
+      cache: 'no-store',
+    });
+    const data = await res.json().catch(() => ({ error: 'Invalid response from search service' }));
+    return NextResponse.json(data, { status: res.status });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Search failed' },
