@@ -54,28 +54,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async (u: User) => {
-    const au = getDiscordProfile(u);
-    setAppUser(au);
-    await ensureProfile(u);
-    const { data } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
-    setProfile(data || null);
+    try {
+      const au = getDiscordProfile(u);
+      setAppUser(au);
+      await ensureProfile(u);
+      const { data } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
+      setProfile(data || null);
 
-    if (
-      data &&
-      data.role !== 'owner' &&
-      isOwnerBootstrap({ email: u.email || data.email, discordId: au.discordId || data.discord_id })
-    ) {
-      await supabase.from('profiles').update({ role: 'owner' }).eq('id', u.id);
-      const { data: again } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
-      setProfile(again || data);
+      if (
+        data &&
+        data.role !== 'owner' &&
+        isOwnerBootstrap({ email: u.email || data.email, discordId: au.discordId || data.discord_id })
+      ) {
+        await supabase.from('profiles').update({ role: 'owner' }).eq('id', u.id);
+        const { data: again } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
+        setProfile(again || data);
+      }
+    } catch (e) {
+      console.error('loadProfile', e);
     }
   }, []);
 
   const loadAppLock = useCallback(async () => {
-    const { data } = await supabase.from('site_settings').select('value').eq('key', 'app_lock').maybeSingle();
-    const v = data?.value as { locked?: boolean; message?: string } | null;
-    setAppLocked(!!v?.locked);
-    setAppLockMessage(v?.message || 'Site is temporarily locked by Owner');
+    try {
+      const { data } = await supabase.from('site_settings').select('value').eq('key', 'app_lock').maybeSingle();
+      const v = data?.value as { locked?: boolean; message?: string } | null;
+      setAppLocked(!!v?.locked);
+      setAppLockMessage(v?.message || 'Site is temporarily locked by Owner');
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -95,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null);
       }
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
 
     const {
       data: { subscription },
@@ -138,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const role: SiteRole = bootstrapOwner ? 'owner' : ((profile?.role as SiteRole) || 'user');
 
-  const adminUntil = profile?.admin_panel_until ? new Date(profile.admin_panel_until as string) : null;
+  const adminUntil = profile?.admin_panel_until ? new Date(profile.admin_panel_until) : null;
   const isBoughtAdmin = Boolean(adminUntil && adminUntil.getTime() > Date.now());
 
   const isOwner = role === 'owner';
