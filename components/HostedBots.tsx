@@ -46,6 +46,22 @@ const statusStyle: Record<string, string> = {
   error: 'bg-rose-400/10 text-rose-200',
 };
 
+// The worker sends a heartbeat every minute. No heartbeat for 3+ minutes means the
+// 24/7 worker (Railway) is down, so the website shows offline instead of a stale "online".
+const STALE_MS = 3 * 60 * 1000;
+
+function statusView(b: BotRow): { label: string; style: string; note: string } {
+  if (!b.enabled) return { label: 'disabled', style: statusStyle.offline, note: '' };
+  if (b.status === 'online') {
+    const age = b.last_heartbeat ? Date.now() - new Date(b.last_heartbeat).getTime() : Number.POSITIVE_INFINITY;
+    if (age > STALE_MS) {
+      return { label: 'offline', style: statusStyle.offline, note: 'Worker is not responding (no heartbeat for over 3 minutes).' };
+    }
+    return { label: 'online', style: statusStyle.online, note: '' };
+  }
+  return { label: b.status, style: statusStyle[b.status] || statusStyle.offline, note: '' };
+}
+
 export default function HostedBots() {
   const [form, setForm] = useState<Form>(EMPTY);
   const [bots, setBots] = useState<BotRow[]>([]);
@@ -75,9 +91,10 @@ export default function HostedBots() {
     catch (e) { setError(e instanceof Error ? e.message : 'Could not load bots'); }
   }, [call]);
 
+  // Live status: poll every 5s while the tab is visible (worker -> Supabase SQL -> this page).
   useEffect(() => {
     void refresh();
-    const t = window.setInterval(() => void refresh(), 20000);
+    const t = window.setInterval(() => { if (!document.hidden) void refresh(); }, 5000);
     return () => window.clearInterval(t);
   }, [refresh]);
 
@@ -110,7 +127,7 @@ export default function HostedBots() {
           supporterRoleId: form.supporterRoleId, aiProvider: form.aiProvider,
         },
       });
-      setMessage('Saved' + (d.botName ? ' bot "' + d.botName + '"' : '') + '. The 24/7 worker picks up changes within ~30 seconds.');
+      setMessage('Saved' + (d.botName ? ' bot "' + d.botName + '"' : '') + '. The 24/7 worker connects it to Discord within ~30 seconds; the status below turns online (or shows exactly what is wrong).');
       setForm((f) => ({ ...f, botToken: '' }));
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : 'Save failed'); }
@@ -254,23 +271,36 @@ export default function HostedBots() {
         <h2 className="font-bold text-white">Your hosted bots</h2>
         {bots.length === 0 && <p className="mt-3 text-sm text-gray-400">No bots yet.</p>}
         <div className="mt-3 space-y-3">
-          {bots.map((b) => (
-            <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-black/15 p-4">
-              <div>
-                <p className="text-sm font-semibold text-white">{b.bot_name || b.client_id}</p>
-                <p className="text-xs text-gray-500">{b.modules.join(', ')}</p>
-                {b.last_error && <p className="mt-1 text-xs text-rose-300">{b.last_error}</p>}
+          {bots.map((b) => {
+            const v = statusView(b);
+            return (
+              <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-black/15 p-4">
+                <div>
+                  <p className="text-sm font-semibold text-white">{b.bot_name || b.client_id}</p>
+                  <p className="text-xs text-gray-500">{b.modules.join(', ')}</p>
+                  {v.note
+                    ? <p className="mt-1 text-xs text-amber-300">{v.note}</p>
+                    : b.enabled && b.status === 'error' && b.last_error
+                      ? <p className="mt-1 text-xs text-rose-300">{b.last_error}</p>
+                      : null}
+                  {v.label === 'online' && b.last_heartbeat && (
+                    <p className="mt-1 text-xs text-gray-500">Live: last heartbeat {new Date(b.last_heartbeat).toLocaleTimeString()}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={'rounded-full px-3 py-1 text-xs ' + v.style}>
+                    {v.label === 'online' && <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-300" />}
+                    {v.label}
+                  </span>
+                  <button onClick={() => edit(b)} className="rounded-lg border border-white/10 p-2 text-gray-200" title="Edit"><Pencil className="h-4 w-4" /></button>
+                  <button disabled={busy} onClick={() => void toggle(b)} className="rounded-lg border border-white/10 p-2 text-gray-200" title="Enable / disable"><Power className="h-4 w-4" /></button>
+                  <button disabled={busy} onClick={() => void remove(b)} className="rounded-lg border border-rose-400/20 p-2 text-rose-200" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={'rounded-full px-3 py-1 text-xs ' + (statusStyle[b.enabled ? b.status : 'offline'] || statusStyle.offline)}>{b.enabled ? b.status : 'disabled'}</span>
-                <button onClick={() => edit(b)} className="rounded-lg border border-white/10 p-2 text-gray-200" title="Edit"><Pencil className="h-4 w-4" /></button>
-                <button disabled={busy} onClick={() => void toggle(b)} className="rounded-lg border border-white/10 p-2 text-gray-200" title="Enable / disable"><Power className="h-4 w-4" /></button>
-                <button disabled={busy} onClick={() => void remove(b)} className="rounded-lg border border-rose-400/20 p-2 text-rose-200" title="Delete"><Trash2 className="h-4 w-4" /></button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-        <p className="mt-4 text-xs leading-5 text-gray-500">Status becomes <b>online</b> only after the always-on bot worker (Railway/Render/VPS) is running. Until then bots stay <b>pending</b>.</p>
+        <p className="mt-4 text-xs leading-5 text-gray-500">Status becomes <b>online</b> only after the always-on bot worker (Railway/Render/VPS) logs the bot in to Discord and every ID and permission checks out. If something is wrong the exact problem is shown here, and a bot whose worker stops answering switches to <b>offline</b> within 3 minutes.</p>
       </div>
     </section>
   );
