@@ -34,6 +34,9 @@ export type Profile = {
   role?: SiteRole | string | null;
   badges?: string[] | null;
   is_verified?: boolean | null;
+  /** Public: true while premium plan active (set on payment approve) */
+  is_premium?: boolean | null;
+  premium_until?: string | null;
   is_banned: boolean | null;
   is_permanent_ban: boolean | null;
   ban_until: string | null;
@@ -41,6 +44,18 @@ export type Profile = {
   created_at: string;
   updated_at: string;
 };
+
+/** True if profile has active premium (not expired). */
+export function isPremiumActive(p: {
+  is_premium?: boolean | null;
+  premium_until?: string | null;
+} | null | undefined): boolean {
+  if (!p) return false;
+  if (p.premium_until) {
+    return new Date(p.premium_until).getTime() > Date.now();
+  }
+  return !!p.is_premium;
+}
 
 export type AppUser = {
   id: string;
