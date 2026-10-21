@@ -1,39 +1,43 @@
-# Discord Promo Hub — persistent bot worker
+# Discord Promo Hub — 24/7 bot worker
 
-This is a real Discord Gateway worker, separate from the Next.js website. It supports welcome/goodbye messages, optional auto-role, slash-command timeout/untimeout/ban/unban, supporter role management, basic invite attribution/leaderboard, and optional OpenAI-compatible AI chat.
+Persistent Discord Gateway worker (WebSocket). Runs every bot users save from the website `/hosting` page (tokens from Supabase Vault).
 
-## Run locally
+## Architecture
 
-Requires Node.js 20+.
+| Layer | Host | Role |
+|-------|------|------|
+| Website + API | **Vercel** | Next.js, dashboard, Edge Functions |
+| Bot worker | **Railway** (or VPS) | Long-running Node process + Discord Gateway |
+| DB + secrets | **Supabase** | Postgres, Vault tokens, status heartbeats |
 
-1. Copy `.env.example` to `.env` and set values privately.
-2. Create a Discord application and bot in the Discord Developer Portal. Keep the bot token secret.
-3. Install the bot in your test server with only required permissions: View Channels, Send Messages, Embed Links, Read Message History, Moderate Members, Ban Members, Manage Roles (only if using role features). Do not grant Administrator by default.
-4. In the Developer Portal, enable **Server Members Intent** for welcome/member role features and **Message Content Intent** for prefix/mention AI chat. Invite tracking also requires Manage Server / Manage Guild access for fetching invites.
-5. Run:
+Vercel alone cannot keep a Discord bot online. This worker must run on Railway (or similar) with WebSocket support.
+
+## Railway deploy
+
+1. Create project → deploy from GitHub `kumarsumit68439-code/discord-promo-hub`
+2. **Root Directory:** `bot-worker`
+3. **Builder:** Dockerfile (uses `bot-worker/Dockerfile`)
+4. Variables:
+   - `SUPABASE_URL` = `https://nimduknedcjsmimaszvu.supabase.co`
+   - `SUPABASE_SERVICE_ROLE_KEY` = from Supabase Dashboard → Settings → API → `service_role` (secret)
+5. Restart policy: **Always**
+6. Disable sleep / serverless mode
+
+After deploy, open site → **Bots** tab → save a bot token. Worker syncs every 30s and sets status to `online`.
+
+## Local
 
 ```sh
 cd bot-worker
+cp .env.example .env   # fill SUPABASE_* or DISCORD_BOT_TOKEN
 npm install
 npm start
 ```
 
-## Environment variables
+## Commands (when modules enabled)
 
-See `.env.example`. Keep all tokens and API keys in the persistent host's secret settings, not in GitHub or browser code. For OpenRouter, set `AI_BASE_URL=https://openrouter.ai/api/v1`, your chosen `AI_MODEL`, and `AI_API_KEY`. AI is disabled unless both key and model are set.
+`/ping` · `/timeout` · `/untimeout` · `/ban` · `/unban` · `/supporter` · `/invites` · `/invite-leaderboard`
 
-## Hosting 24/7
+## Intents (Discord Developer Portal)
 
-Deploy the `bot-worker` directory as a long-running Node.js worker/service on a provider that supports persistent processes and WebSocket connections. Set its environment variables there and enable automatic restart. A Next.js/Vercel serverless deployment alone does not keep this process alive. The website dashboard does not yet provision workers or securely store per-user bot secrets.
-
-## Commands
-
-- `/ping`
-- `/timeout member minutes reason`, `/untimeout member reason`
-- `/ban member reason`, `/unban user_id reason`
-- `/supporter grant member`, `/supporter revoke member` (configure `SUPPORTER_ROLE_ID`)
-- `/invites`, `/invite-leaderboard`
-
-## Important limitations
-
-Invite counts are in-memory in this first worker version and reset on restart; invite attribution can be unavailable for vanity links, single-use races, or when Discord denies invite fetch access. For durable analytics, connect a database and persist invite snapshots/counts. This worker is a shared-feature bot process, not a secure multi-tenant token vault or a general-purpose container hosting platform. Test moderation commands in a private server first.
+Enable **Server Members Intent** and **Message Content Intent** if using welcome/AI modules.
