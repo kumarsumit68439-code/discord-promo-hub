@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
+import PremiumBadge from '@/components/PremiumBadge';
 import { User, Save, CheckCircle2, XCircle, Mail, Hash, Shield } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { user, appUser, profile, loading, refreshProfile, signInDiscord } = useAuth();
+  const { user, appUser, profile, loading, refreshProfile } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [saving, setSaving] = useState(false);
@@ -79,6 +80,25 @@ export default function ProfilePage() {
       <main className="mx-auto max-w-2xl px-4 py-8">
         <h1 className="mb-6 text-2xl font-bold text-white">Account & Profile</h1>
 
+        {profile && (
+          <div className="mb-4">
+            <PremiumBadge
+              is_premium={profile.is_premium}
+              premium_until={profile.premium_until}
+              size="md"
+              showUntil
+            />
+            {!profile.is_premium && (
+              <p className="mt-2 text-xs text-gray-500">
+                Premium nahi hai ·{' '}
+                <Link href="/pricing" className="text-amber-300 hover:underline">
+                  Plan buy karein →
+                </Link>
+              </p>
+            )}
+          </div>
+        )}
+
         <section className="mb-6 rounded-2xl border border-white/5 bg-discord-card p-5">
           <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase text-gray-400">
             <Shield className="h-4 w-4" /> Discord account check
@@ -86,14 +106,24 @@ export default function ProfilePage() {
           <div className="flex gap-4">
             {appUser.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={appUser.avatarUrl} alt="" className="h-16 w-16 rounded-full" />
+              <img
+                src={appUser.avatarUrl}
+                alt=""
+                className={
+                  'h-16 w-16 rounded-full ' +
+                  (profile?.is_premium ? 'ring-2 ring-amber-400/60' : '')
+                }
+              />
             ) : (
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-discord-blurple text-xl font-bold text-white">
                 {appUser.username[0]}
               </div>
             )}
             <div>
-              <p className="text-lg font-semibold text-white">{appUser.username}</p>
+              <p className="flex flex-wrap items-center gap-2 text-lg font-semibold text-white">
+                {appUser.username}
+                <PremiumBadge is_premium={profile?.is_premium} premium_until={profile?.premium_until} />
+              </p>
               {discordConnected ? (
                 <span className="inline-flex items-center gap-1 text-xs text-discord-green">
                   <CheckCircle2 className="h-3.5 w-3.5" /> Discord linked
