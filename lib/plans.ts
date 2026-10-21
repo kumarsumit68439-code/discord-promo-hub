@@ -75,10 +75,11 @@ export const PLANS: PlanDef[] = [
     id: 'admin_panel',
     name: 'Admin Panel',
     price: 799,
-    days: 30,
-    tagline: 'Limited staff tools',
+    days: 7,
+    tagline: 'Limited staff tools · 7 days',
     features: [
       'Access to Admin panel only',
+      'Valid for 7 days only',
       'Ban / unban users',
       'Grant verified badges',
       'Grant premium to users',
