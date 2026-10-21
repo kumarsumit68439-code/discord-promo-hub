@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { FREE_MODULES, PlanState } from '@/lib/plans';
 import { HOSTING_MODULES } from './botModuleList';
+import BotControlPanel from './BotControlPanel';
 import {
   Bot,
   Lock,
@@ -29,6 +30,7 @@ type BotRow = {
   status: string;
   last_error: string | null;
   last_heartbeat: string | null;
+  voice_state?: Record<string, unknown> | null;
 };
 
 type Form = {
@@ -106,6 +108,18 @@ function missingChannelIds(form: Form): string[] {
   if (has('ai') && !form.aiChannelId.trim()) miss.push('AI chat channel ID');
   if (has('music') && !form.musicChannelId.trim()) miss.push('Music text channel ID');
   return miss;
+}
+
+function statusLabel(b: BotRow): { label: string; cls: string } {
+  if (!b.enabled) return { label: 'disabled', cls: 'bg-white/5 text-gray-400' };
+  if (b.status === 'pending') return { label: 'starting…', cls: 'bg-amber-400/10 text-amber-200' };
+  if (b.status === 'error') return { label: 'error', cls: 'bg-rose-400/10 text-rose-200' };
+  if (b.status === 'online') {
+    const age = b.last_heartbeat ? Date.now() - new Date(b.last_heartbeat).getTime() : Number.POSITIVE_INFINITY;
+    if (age > 3 * 60 * 1000) return { label: 'offline', cls: 'bg-white/5 text-gray-400' };
+    return { label: 'online', cls: 'bg-emerald-400/10 text-emerald-200' };
+  }
+  return { label: b.status || 'offline', cls: 'bg-white/5 text-gray-400' };
 }
 
 export default function HostedBotsView() {
@@ -207,7 +221,7 @@ export default function HostedBotsView() {
       setMessage(
         'Saved' +
           (d.botName ? ' bot "' + d.botName + '"' : '') +
-          '. Invite the bot, then it works in the channels you set — online in ~30s.'
+          '. Invite the bot — control panel appears when status is online.'
       );
       setForm((f) => ({ ...f, botToken: '' }));
       await refresh();
@@ -223,6 +237,7 @@ export default function HostedBotsView() {
     setError('');
     try {
       await call({ action: 'toggle', id: b.id, enabled: !b.enabled });
+      setMessage(!b.enabled ? 'Starting… online in ~30s. Control panel unlocks when status is online.' : 'Bot disabled.');
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed');
@@ -329,8 +344,8 @@ export default function HostedBotsView() {
           <Bot className="h-5 w-5 text-indigo-300" /> Add your bot
         </h2>
         <p className="mt-1 text-sm text-gray-400">
-          Every module (except Channel &amp; VC Builder / Server Setup) needs the channel ID where it should run. The bot
-          posts and listens only in those channels after you invite it.
+          After the bot is <b>online</b>, a live control panel opens under it (voice join/leave, music player, welcome test,
+          etc.).
         </p>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -392,9 +407,7 @@ export default function HostedBotsView() {
                   <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
                     {m.title}
                     {isSetup && (
-                      <span className="rounded bg-indigo-500/30 px-1.5 py-0.5 text-[10px] font-bold text-indigo-200">
-                        SETUP
-                      </span>
+                      <span className="rounded bg-indigo-500/30 px-1.5 py-0.5 text-[10px] font-bold text-indigo-200">SETUP</span>
                     )}
                     {!isSetup && m.id !== 'simple' && m.id !== 'invite' && (
                       <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
@@ -426,117 +439,69 @@ export default function HostedBotsView() {
             <p className="text-xs font-semibold uppercase text-gray-400">Welcome · required channel</p>
             {field('Welcome channel ID', 'welcomeChannelId', 'required')}
             {field('Auto role ID', 'welcomeRoleId', 'optional')}
-            <div>
-              <label className="text-sm text-gray-300">Welcome message</label>
-              <textarea
-                value={form.welcomeMessage}
-                onChange={(e) => set('welcomeMessage', e.target.value)}
-                rows={2}
-                className={input}
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-300">Goodbye message</label>
-              <textarea
-                value={form.goodbyeMessage}
-                onChange={(e) => set('goodbyeMessage', e.target.value)}
-                rows={1}
-                className={input}
-              />
-            </div>
+            <textarea value={form.welcomeMessage} onChange={(e) => set('welcomeMessage', e.target.value)} rows={2} className={input} />
           </div>
         )}
-
         {has('support') && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
             <p className="text-xs font-semibold uppercase text-gray-400">Support · required channel</p>
             {field('Support channel ID', 'supportChannelId', 'required')}
-            <div>
-              <label className="text-sm text-gray-300">Support reply / FAQ</label>
-              <textarea
-                value={form.supportFaq || form.supportMessage}
-                onChange={(e) => {
-                  set('supportFaq', e.target.value);
-                  set('supportMessage', e.target.value);
-                }}
-                rows={2}
-                className={input}
-              />
-            </div>
           </div>
         )}
-
         {(has('ticket') || has('tokenclaim')) && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
-            <p className="text-xs font-semibold uppercase text-gray-400">Ticket / Token claim · required channels</p>
+            <p className="text-xs font-semibold uppercase text-gray-400">Ticket / Token</p>
             {field('Ticket panel channel ID', 'ticketChannelId', 'required')}
             {field('Ticket category ID', 'ticketCategoryId', 'optional')}
             {field('Support role ID', 'ticketSupportRoleId', 'optional')}
             {field('Ticket log channel ID', 'ticketLogChannelId', 'optional')}
           </div>
         )}
-
         {(has('moderation') || has('ban') || has('security')) && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
-            <p className="text-xs font-semibold uppercase text-gray-400">Moderation / Ban / Security · log channel</p>
+            <p className="text-xs font-semibold uppercase text-gray-400">Mod / Security log</p>
             {field('Mod / security log channel ID', 'modLogChannelId', 'required')}
           </div>
         )}
-
         {has('voice') && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
-            <p className="text-xs font-semibold uppercase text-gray-400">Voice · required VC</p>
+            <p className="text-xs font-semibold uppercase text-gray-400">Voice</p>
             {field('Default voice channel ID', 'voiceChannelId', 'required')}
           </div>
         )}
-
         {has('levels') && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
-            <p className="text-xs font-semibold uppercase text-gray-400">Level-up · required channel</p>
+            <p className="text-xs font-semibold uppercase text-gray-400">Level-up</p>
             {field('Level-up announce channel ID', 'levelChannelId', 'required')}
           </div>
         )}
-
         {has('protect') && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
-            <p className="text-xs font-semibold uppercase text-gray-400">Protection · log channel</p>
+            <p className="text-xs font-semibold uppercase text-gray-400">Protect log</p>
             {field('Protect log channel ID', 'protectLogChannelId', 'required')}
           </div>
         )}
-
         {has('memberadd') && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
-            <p className="text-xs font-semibold uppercase text-gray-400">Member add · channel</p>
+            <p className="text-xs font-semibold uppercase text-gray-400">Member add</p>
             {field('Member-add channel ID', 'memberAddChannelId', 'required')}
-            <div>
-              <label className="text-sm text-gray-300">Invite DM text</label>
-              <textarea
-                value={form.inviteDmMessage}
-                onChange={(e) => set('inviteDmMessage', e.target.value)}
-                rows={2}
-                className={input}
-              />
-            </div>
           </div>
         )}
-
         {has('ai') && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
-            <p className="text-xs font-semibold uppercase text-gray-400">AI chat · required channel</p>
+            <p className="text-xs font-semibold uppercase text-gray-400">AI chat</p>
             {field('AI channel ID', 'aiChannelId', 'required')}
           </div>
         )}
-
         {has('supporter') && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
-            <p className="text-xs font-semibold uppercase text-gray-400">Supporter role</p>
+            <p className="text-xs font-semibold uppercase text-gray-400">Supporter</p>
             {field('Supporter role ID', 'supporterRoleId', 'required')}
           </div>
         )}
-
         {has('music') && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
-            <p className="text-xs font-semibold uppercase text-gray-400">Music · text channel for commands</p>
+            <p className="text-xs font-semibold uppercase text-gray-400">Music</p>
             {field('Music channel ID', 'musicChannelId', 'required')}
           </div>
         )}
@@ -581,11 +546,14 @@ export default function HostedBotsView() {
 
       <div className="rounded-2xl border border-white/10 bg-discord-card p-5 sm:p-6">
         <h2 className="text-lg font-bold text-white">Your hosted bots</h2>
-        <p className="mt-1 text-xs text-gray-500">Status from Railway worker · bots act in the channel IDs you saved.</p>
+        <p className="mt-1 text-xs text-gray-500">
+          When status is <b>online</b>, the mini control panel appears under that bot.
+        </p>
         <div className="mt-4 space-y-3">
           {bots.length === 0 && <p className="text-sm text-gray-400">No bots yet.</p>}
           {bots.map((b) => {
             const mods = b.modules || [];
+            const st = statusLabel(b);
             return (
               <div key={b.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -595,7 +563,7 @@ export default function HostedBotsView() {
                     {b.last_error && <p className="mt-1 text-xs text-rose-300">{b.last_error}</p>}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-gray-300">{b.status}</span>
+                    <span className={'rounded-full px-3 py-1 text-xs ' + st.cls}>{st.label}</span>
                     <button type="button" onClick={() => edit(b)} className="rounded-lg border border-white/10 p-2 text-gray-200">
                       <Pencil className="h-4 w-4" />
                     </button>
@@ -604,6 +572,7 @@ export default function HostedBotsView() {
                       disabled={busy}
                       onClick={() => void toggle(b)}
                       className="rounded-lg border border-white/10 p-2 text-gray-200"
+                      title="Enable / disable"
                     >
                       <Power className="h-4 w-4" />
                     </button>
@@ -617,6 +586,7 @@ export default function HostedBotsView() {
                     </button>
                   </div>
                 </div>
+                <BotControlPanel bot={b} />
               </div>
             );
           })}
