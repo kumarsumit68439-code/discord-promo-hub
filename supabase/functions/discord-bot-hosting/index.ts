@@ -9,7 +9,6 @@ const corsHeaders = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-// Must match HOSTING_MODULES / BOT_MODULES in the website UI
 const ALLOWED_MODULES = [
   "welcome",
   "support",
@@ -25,6 +24,7 @@ const ALLOWED_MODULES = [
   "ai",
   "supporter",
   "invite",
+  "music",
 ];
 const FREE_MODULES = ["welcome", "support"];
 const ID = /^\d{15,22}$/;
@@ -108,29 +108,18 @@ Deno.serve(async (req: Request) => {
         .map(String)
         .filter((m: string) => ALLOWED_MODULES.includes(m));
       if (modules.length === 0) {
-        return json(
-          {
-            error:
-              "Select at least one module (Welcome, Support, Ticket, Security, Token Claim, Moderation, Voice, …)",
-          },
-          400,
-        );
+        return json({
+          error: "Select at least one module (Welcome, Support, Ticket, Security, Music, …)",
+        }, 400);
       }
 
-      // Premium gate: free users may only save free modules
       const plan = await getPlan();
       if (!plan.premium) {
         const locked = modules.filter((m: string) => !FREE_MODULES.includes(m));
         if (locked.length > 0) {
-          return json(
-            {
-              error:
-                "Ye modules Premium mein hain: " +
-                locked.join(", ") +
-                ". Free plan mein sirf Welcome + Support. Plans page se ₹20 Premium lo.",
-            },
-            403,
-          );
+          return json({
+            error: "Ye modules Premium mein hain: " + locked.join(", ") + ". Free: Welcome + Support only. Plans se ₹20 Premium lo.",
+          }, 403);
         }
       }
 
@@ -159,6 +148,7 @@ Deno.serve(async (req: Request) => {
         memberAddChannelId: cleanId(c.memberAddChannelId),
         inviteDmMessage: cleanStr(c.inviteDmMessage, 1000),
         voiceChannelId: cleanId(c.voiceChannelId),
+        musicChannelId: cleanId(c.musicChannelId),
       };
 
       let botName: string | null = null;
@@ -167,25 +157,13 @@ Deno.serve(async (req: Request) => {
           headers: { Authorization: "Bot " + botToken },
         });
         if (!me.ok) {
-          return json(
-            {
-              error:
-                "Discord rejected this bot token (HTTP " +
-                me.status +
-                "). Reset the token in the Developer Portal and try again.",
-            },
-            400,
-          );
+          return json({
+            error: "Discord rejected this bot token (HTTP " + me.status + "). Reset token in Developer Portal.",
+          }, 400);
         }
         const info = await me.json();
         if (String(info.id) !== clientId) {
-          return json(
-            {
-              error:
-                "This token belongs to a different application than the Client ID you entered.",
-            },
-            400,
-          );
+          return json({ error: "This token belongs to a different application than the Client ID." }, 400);
         }
         botName = String(info.username || "");
       }
@@ -228,9 +206,7 @@ Deno.serve(async (req: Request) => {
       });
       if (error) return json({ error: error.message }, 400);
       if (data === "not_found") return json({ error: "Bot not found" }, 404);
-      if (data === "busy") {
-        return json({ error: "A test was just requested. Wait a few seconds and try again." }, 429);
-      }
+      if (data === "busy") return json({ error: "A test was just requested. Wait a few seconds." }, 429);
       return json({ queued: true });
     }
 
