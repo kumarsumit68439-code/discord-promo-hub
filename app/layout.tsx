@@ -8,11 +8,10 @@ import AuthGate from '@/components/AuthGate';
 import BottomNav from '@/components/BottomNav';
 
 export const metadata: Metadata = {
-  title: 'Discord Promo Hub',
-  description: 'Login required · Promote Discord servers, chat, follow, music',
+  title: 'Promo Hub',
+  description: 'Discord servers aur websites promote karo. Bots, chat, music — ek jagah.',
 };
 
-// Applies the saved theme/animation before first paint (no flash of the default theme).
 const INIT_SCRIPT = `(function(){try{var c=JSON.parse(localStorage.getItem('hub-css')||'null');if(!c)return;var d=document.documentElement;for(var k in c.vars){d.style.setProperty(k,c.vars[k]);}if(c.anim){d.setAttribute('data-anim','1');}if(c.dir){d.dir=c.dir;}}catch(e){}})();`;
 
 export default function RootLayout({

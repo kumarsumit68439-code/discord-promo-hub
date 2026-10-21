@@ -7,8 +7,8 @@ export default function SiteFooter() {
   const { appUser, isAdmin, user } = useAuth();
   if (!user) return null;
 
-  const item = (href: string, label: string) => (
-    <Link href={href} className="block text-sm text-gray-400 transition hover:text-white">
+  const link = (href: string, label: string) => (
+    <Link href={href} className="text-[13px] text-[#949ba4] hover:text-[#dbdee1]">
       {label}
     </Link>
   );
@@ -16,43 +16,28 @@ export default function SiteFooter() {
   const id = appUser?.id;
 
   return (
-    <footer className="mt-12 border-t border-white/5 bg-discord-dark/50 pb-28 pt-10 sm:pb-10">
-      <div className="mx-auto grid max-w-6xl gap-8 px-4 sm:grid-cols-2 md:grid-cols-3">
-        <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Promotion
+    <footer className="mt-16 border-t border-white/[0.05] pb-28 pt-8 sm:pb-10">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 sm:flex-row sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-[13px] font-medium text-[#dbdee1]">Promo Hub</p>
+          <p className="max-w-xs text-[12px] leading-relaxed text-[#6d6f78]">
+            Servers, websites, bots — jo promote karna hai, yahan daal do.
           </p>
-          <div className="space-y-2">
-            {item('/', 'Promo / Discord & Website ads')}
-            {item('/music', 'YouTube Music player')}
-            {item('/profile', 'Edit profile · Discord check')}
-          </div>
         </div>
-        <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            User to user
-          </p>
-          <div className="space-y-2">
-            {item('/users', 'Account search')}
-            {id && item(`/u/${id}`, 'My account check page')}
-            {id && item(`/u/${id}/followers`, 'Followers check')}
-            {id && item(`/u/${id}/following`, 'Following check')}
-            {item('/messages', 'Messages inbox')}
-          </div>
-        </div>
-        <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            More
-          </p>
-          <div className="space-y-2">
-            {item('/users', 'Open any user → Follow / Message')}
-            {isAdmin && item('/admin', 'Admin panel (ban / unban)')}
-            <p className="text-xs text-gray-600">
-              Search → user page = follow + following + message
-            </p>
-          </div>
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          {link('/', 'Home')}
+          {link('/users', 'People')}
+          {link('/messages', 'Chat')}
+          {link('/hosting', 'Bots')}
+          {link('/music', 'Music')}
+          {link('/rules', 'Rules')}
+          {id && link(`/u/${id}`, 'Profile')}
+          {isAdmin && link('/admin', 'Admin')}
         </div>
       </div>
+      <p className="mx-auto mt-6 max-w-6xl px-4 text-[11px] text-[#4e5058]">
+        Built for Discord communities · not affiliated with Discord Inc.
+      </p>
     </footer>
   );
 }
