@@ -30,8 +30,8 @@ function friendlyTestError(err) {
 
 async function tryEnableIntents(row, hasAi) {
   const mods = row.modules || [];
-  const needMembers = mods.some((m) => ['welcome', 'invite', 'supporter', 'levels', 'memberadd'].includes(m));
-  const needContent = mods.some((m) => ['ai', 'support', 'levels', 'protect', 'ticket'].includes(m));
+  const needMembers = mods.some((m) => ['welcome', 'invite', 'supporter', 'levels', 'memberadd', 'security', 'tokenclaim', 'moderation'].includes(m));
+  const needContent = mods.some((m) => ['ai', 'support', 'levels', 'protect', 'ticket', 'tokenclaim', 'security'].includes(m));
   const headers = { Authorization: 'Bot ' + row.token, 'Content-Type': 'application/json' };
   const api = 'https://discord.com/api/v10/applications/@me';
   try {
@@ -255,7 +255,6 @@ async function runHosted() {
         .order('created_at', { ascending: true })
         .limit(20);
       if (error) {
-        // table may not have RLS for service role issues
         return;
       }
       for (const cmd of data || []) {
