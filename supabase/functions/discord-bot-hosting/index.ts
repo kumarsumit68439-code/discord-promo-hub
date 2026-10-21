@@ -37,7 +37,14 @@ Deno.serve(async (req: Request) => {
     if (action === "status") {
       const { data, error } = await admin.rpc("list_hosted_bots", { p_user_id: userId });
       if (error) return json({ error: error.message }, 500);
-      return json({ bots: data || [] });
+      // Merge the "Send test welcome" state. If that lookup fails the bots still load without it.
+      const { data: tests } = await admin.rpc("list_test_welcome_state", { p_user_id: userId });
+      const byId = new Map<string, Record<string, unknown>>((tests || []).map((t: { id: string }) => [t.id, t as Record<string, unknown>]));
+      const bots = (data || []).map((b: { id: string }) => {
+        const t = byId.get(b.id);
+        return { ...b, test_requested_at: t?.test_requested_at ?? null, test_result: t?.test_result ?? null, test_done_at: t?.test_done_at ?? null };
+      });
+      return json({ bots });
     }
 
     if (action === "save") {
@@ -79,6 +86,15 @@ Deno.serve(async (req: Request) => {
       const { data, error } = await admin.rpc("delete_hosted_bot", { p_user_id: userId, p_id: String(body.id || "") });
       if (error) return json({ error: error.message }, 400);
       return json({ deleted: Boolean(data) });
+    }
+
+    if (action === "test_welcome") {
+      // Queues one test welcome message; the always-on worker posts it within a few seconds.
+      const { data, error } = await admin.rpc("request_test_welcome", { p_user_id: userId, p_id: String(body.id || "") });
+      if (error) return json({ error: error.message }, 400);
+      if (data === "not_found") return json({ error: "Bot not found" }, 404);
+      if (data === "busy") return json({ error: "A test was just requested. Wait a few seconds and try again." }, 429);
+      return json({ queued: true });
     }
 
     return json({ error: "Unknown action" }, 400);
