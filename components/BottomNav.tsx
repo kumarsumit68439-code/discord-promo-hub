@@ -19,6 +19,9 @@ import {
   BookOpen,
   ClipboardCheck,
   Bot,
+  Sparkles,
+  Brain,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 
@@ -35,6 +38,8 @@ export default function BottomNav() {
     { href: '/messages', label: 'Chat', icon: MessagesSquare },
     { href: '/music', label: 'Music', icon: Music2 },
     { href: '/hosting', label: 'Bots', icon: Bot },
+    { href: '/pricing', label: 'Plans', icon: Sparkles },
+    { href: '/ai', label: 'AI', icon: Brain },
     { href: '/rules', label: 'Rules', icon: BookOpen },
     {
       href: appUser ? `/u/${appUser.id}` : '/profile',
@@ -53,6 +58,7 @@ export default function BottomNav() {
   if (role === 'helper') items.push({ href: '/panel/helper', label: 'Helper', icon: HeartHandshake });
   if (role === 'developer') items.push({ href: '/panel/developer', label: 'Dev', icon: Code2 });
   if (role === 'moderator') items.push({ href: '/panel/moderator', label: 'Mod', icon: Wrench });
+  if (isAdmin) items.push({ href: '/admin/payments', label: 'Payments', icon: Wallet });
   if (isAdmin) items.push({ href: '/admin', label: 'Admin', icon: Shield });
   if (role === 'acting_owner')
     items.push({ href: '/panel/acting-owner', label: 'A.Owner', icon: Star });

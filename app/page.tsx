@@ -20,12 +20,15 @@ import {
   Music2,
   User,
   UserCircle2,
+  Crown,
+  Star,
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function Home() {
   const { user, appUser } = useAuth();
   const [listings, setListings] = useState<Listing[]>([]);
+  const [premiumIds, setPremiumIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'discord' | 'website'>('all');
   const [search, setSearch] = useState('');
@@ -52,6 +55,9 @@ export default function Home() {
       .eq('is_active', true)
       .order('created_at', { ascending: false });
     if (!error && data) setListings(data);
+    // Premium users get high promotion: their listings are shown first with a badge.
+    const { data: prem } = await supabase.rpc('premium_user_ids');
+    setPremiumIds(new Set(((prem || []) as Array<{ user_id: string }>).map((r) => r.user_id)));
     setLoading(false);
   }
 
@@ -104,22 +110,27 @@ export default function Home() {
     else alert(error.message);
   }
 
-  const filtered = listings.filter((l) => {
-    const matchType = filter === 'all' || l.type === filter;
-    const matchSearch =
-      !search ||
-      l.title.toLowerCase().includes(search.toLowerCase()) ||
-      (l.description || '').toLowerCase().includes(search.toLowerCase()) ||
-      l.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()));
-    return matchType && matchSearch;
-  });
+  const isPremium = (l: Listing) => Boolean(l.user_id && premiumIds.has(l.user_id));
+
+  const filtered = listings
+    .filter((l) => {
+      const matchType = filter === 'all' || l.type === filter;
+      const matchSearch =
+        !search ||
+        l.title.toLowerCase().includes(search.toLowerCase()) ||
+        (l.description || '').toLowerCase().includes(search.toLowerCase()) ||
+        l.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()));
+      return matchType && matchSearch;
+    })
+    .sort((a, b) => Number(isPremium(b)) - Number(isPremium(a)));
 
   const quick = [
     { href: '/users', label: 'Search users', icon: Users, desc: 'Find & check accounts' },
     { href: '/messages', label: 'Messages', icon: MessagesSquare, desc: 'Realtime chat' },
     { href: '/music', label: 'Music', icon: Music2, desc: 'YouTube player' },
     { href: '/profile', label: 'Profile', icon: User, desc: 'Edit & Discord check' },
-    { href: '/hosting', label: 'Bot Hosting', icon: Bot, desc: 'Welcome, moderation, AI, supporter & invite bots' },
+    { href: '/hosting', label: 'Bot Hosting', icon: Bot, desc: 'Ticket, voice, protection, level, welcome & more bots' },
+    { href: '/pricing', label: 'Plans', icon: Crown, desc: 'Free ya Premium ₹20: high promotion' },
   ];
 
   return (
@@ -136,7 +147,7 @@ export default function Home() {
           </p>
         </section>
 
-        <div className="mb-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mb-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {quick.map((q) => (
             <Link
               key={q.href}
@@ -198,8 +209,15 @@ export default function Home() {
             {filtered.map((listing) => (
               <div
                 key={listing.id}
-                className="relative flex flex-col rounded-xl border border-white/5 bg-discord-card p-5 hover:border-discord-blurple/40"
+                className={`relative flex flex-col rounded-xl border bg-discord-card p-5 hover:border-discord-blurple/40 ${
+                  isPremium(listing) ? 'border-amber-300/40 shadow-[0_0_24px_rgba(251,191,36,0.08)]' : 'border-white/5'
+                }`}
               >
+                {isPremium(listing) && (
+                  <span className="absolute -top-2.5 left-4 inline-flex items-center gap-1 rounded-full bg-amber-300 px-2.5 py-0.5 text-[10px] font-bold text-black">
+                    <Star className="h-3 w-3" /> PREMIUM
+                  </span>
+                )}
                 {user && listing.user_id === user.id && (
                   <button
                     type="button"
