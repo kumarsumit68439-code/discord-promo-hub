@@ -6,20 +6,22 @@ import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
 import { useAuth } from '@/components/AuthProvider';
 import { authFetch } from '@/lib/api';
-import { PREMIUM_DAYS, PREMIUM_PRICE, PlanState } from '@/lib/plans';
-import { Check, Crown, Lock, Sparkles } from 'lucide-react';
+import { PLANS, PlanState } from '@/lib/plans';
+import { Check, Crown, Shield, Sparkles, Zap } from 'lucide-react';
 
-const FREE_FEATURES = ['1 din ke liye bot hosting', 'Welcome bot', 'Support bot', 'Normal promotion'];
-const PREMIUM_FEATURES = [
-  'Saare bots use karein, kitne bhi bots add karein',
-  'Ticket bot (Create ticket button, Ticket Tool jaisa)',
-  'Voice bot: VC join/leave, mute/unmute, 24/7 AFK, timer + AI voice chat',
-  'Server Protection bot: AI live scan (har 2 second)',
-  'Level-up bot + AI leaderboard (top 10)',
-  'Member Add / Invite bot, Moderation, Ban, AI chat, Supporter',
-  'High promotion + High advertisement: aapki listing sabse upar, ⭐ Premium badge',
-  `${PREMIUM_DAYS} din ki validity`,
+const FREE_FEATURES = [
+  'Simple bot hosting (forever free)',
+  'Welcome + Support + Simple command bots',
+  'Custom command prefix',
+  'Normal listing promotion',
 ];
+
+const ICONS = {
+  starter: Zap,
+  pro: Sparkles,
+  vip: Crown,
+  admin_panel: Shield,
+} as const;
 
 export default function PricingPage() {
   const { user } = useAuth();
@@ -34,44 +36,85 @@ export default function PricingPage() {
   }, [user]);
 
   return (
-    <div className="min-h-screen bg-discord-darker pb-24">
+    <div className="min-h-screen bg-[#17181c] pb-24">
       <SiteHeader />
-      <main className="mx-auto max-w-4xl px-4 py-10">
-        <h1 className="text-center text-3xl font-black text-white sm:text-4xl">Plans</h1>
-        <p className="mx-auto mt-3 max-w-xl text-center text-sm text-gray-400">Sirf 2 plans. Free mein basic bots, Premium mein sab kuch.</p>
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        <h1 className="text-center text-2xl font-semibold tracking-tight text-white">Plans</h1>
+        <p className="mx-auto mt-2 max-w-lg text-center text-[13px] text-[#949ba4]">
+          Free simple hosting never expires. Paid plans unlock every module until they end — then bots go offline until you renew.
+        </p>
 
         {plan?.premium && plan.premium_until && (
-          <p className="mx-auto mt-5 max-w-md rounded-xl bg-emerald-400/10 p-3 text-center text-sm text-emerald-200">
-            ⭐ Aapka Premium active hai: {new Date(plan.premium_until).toLocaleDateString()} tak
+          <p className="mx-auto mt-4 max-w-md rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-3 text-center text-[13px] text-emerald-200">
+            Premium active until {new Date(plan.premium_until).toLocaleDateString()}
+          </p>
+        )}
+        {plan?.admin_panel && plan.admin_panel_until && (
+          <p className="mx-auto mt-2 max-w-md rounded-lg border border-indigo-400/20 bg-indigo-400/10 p-3 text-center text-[13px] text-indigo-200">
+            Admin panel access until {new Date(plan.admin_panel_until).toLocaleDateString()}
           </p>
         )}
 
-        <div className="mt-8 grid gap-5 sm:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-discord-card p-6">
-            <p className="text-sm font-semibold text-gray-400">FREE</p>
-            <p className="mt-2 text-4xl font-black text-white">₹0</p>
-            <ul className="mt-5 space-y-2">
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl border border-white/[0.06] bg-[#2b2d31] p-5">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[#6d6f78]">Free</p>
+            <p className="mt-1 text-3xl font-semibold text-white">₹0</p>
+            <p className="mt-1 text-[12px] text-[#949ba4]">Simple hosting, no expiry</p>
+            <ul className="mt-4 space-y-2">
               {FREE_FEATURES.map((f) => (
-                <li key={f} className="flex items-start gap-2 text-sm text-gray-300"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />{f}</li>
-              ))}
-              <li className="flex items-start gap-2 text-sm text-gray-500"><Lock className="mt-0.5 h-4 w-4 shrink-0" />Baaki sab bots Premium mein</li>
-            </ul>
-            <Link href="/hosting" className="mt-6 block rounded-xl border border-white/15 py-3 text-center text-sm font-bold text-white hover:bg-white/5">Free shuru karein</Link>
-          </div>
-
-          <div className="relative rounded-2xl border border-discord-blurple/60 bg-gradient-to-br from-[#23274a] to-discord-card p-6">
-            <span className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-discord-blurple px-3 py-1 text-xs font-bold text-white"><Crown className="h-3 w-3" /> POPULAR</span>
-            <p className="text-sm font-semibold text-indigo-200">PREMIUM</p>
-            <p className="mt-2 text-4xl font-black text-white">₹{PREMIUM_PRICE}<span className="text-base font-semibold text-gray-400"> / {PREMIUM_DAYS} din</span></p>
-            <ul className="mt-5 space-y-2">
-              {PREMIUM_FEATURES.map((f) => (
-                <li key={f} className="flex items-start gap-2 text-sm text-gray-200"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-indigo-300" />{f}</li>
+                <li key={f} className="flex items-start gap-2 text-[13px] text-[#dbdee1]">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                  {f}
+                </li>
               ))}
             </ul>
-            <Link href="/checkout?plan=premium" className="mt-6 block rounded-xl bg-discord-blurple py-3 text-center text-sm font-bold text-white hover:brightness-110">
-              Premium kharidein ₹{PREMIUM_PRICE}
+            <Link
+              href="/hosting"
+              className="mt-5 block rounded-md border border-white/10 py-2.5 text-center text-[13px] font-medium text-white hover:bg-white/[0.04]"
+            >
+              Open hosting
             </Link>
           </div>
+
+          {PLANS.map((p) => {
+            const Icon = ICONS[p.id];
+            return (
+              <div
+                key={p.id}
+                className={`rounded-xl border p-5 ${
+                  p.vip
+                    ? 'border-amber-400/30 bg-gradient-to-b from-amber-400/5 to-[#2b2d31]'
+                    : p.id === 'admin_panel'
+                      ? 'border-indigo-400/25 bg-[#2b2d31]'
+                      : 'border-white/[0.06] bg-[#2b2d31]'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-[#6d6f78]">{p.name}</p>
+                  <Icon className="h-4 w-4 text-[#949cf7]" />
+                </div>
+                <p className="mt-1 text-3xl font-semibold text-white">
+                  ₹{p.price}
+                  <span className="text-sm font-normal text-[#6d6f78]"> / {p.days}d</span>
+                </p>
+                <p className="mt-1 text-[12px] text-[#949ba4]">{p.tagline}</p>
+                <ul className="mt-4 space-y-2">
+                  {p.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-[13px] text-[#dbdee1]">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href={`/checkout?plan=${p.id}`}
+                  className="mt-5 block rounded-md bg-[#5865f2] py-2.5 text-center text-[13px] font-medium text-white hover:bg-[#4752c4]"
+                >
+                  Buy ₹{p.price}
+                </Link>
+              </div>
+            );
+          })}
         </div>
       </main>
       <SiteFooter />

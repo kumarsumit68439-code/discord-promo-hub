@@ -1,4 +1,4 @@
-// Site customisation: themes, animations, effects, languages.
+// Site customisation: themes, animations, effects. Language is English only.
 
 export type SiteSettings = {
   theme: string;
@@ -7,15 +7,12 @@ export type SiteSettings = {
   language: string;
 };
 
-// Site source language is English. 'auto' = no machine translation.
 export const DEFAULT_SETTINGS: SiteSettings = {
   theme: 'default',
   animation: 'default',
   effect: 'none',
-  language: 'auto',
+  language: 'en',
 };
-
-/* ------------------------------ Themes ------------------------------ */
 
 export type ThemeDef = {
   id: string;
@@ -85,8 +82,6 @@ export const THEMES: ThemeDef[] = [
   ...HUES.flatMap(([n, h, m]) => THEME_STYLES.map((st) => buildTheme(n, h, m, st))),
 ];
 
-/* ---------------------------- Animations ---------------------------- */
-
 export type AnimDef = { id: string; name: string; css?: { name: string; dur: string; ease: string } };
 
 const ANIM_BASES = [
@@ -112,8 +107,6 @@ export const ANIMATIONS: AnimDef[] = [
     }))
   ),
 ];
-
-/* ------------------------------ Effects ------------------------------ */
 
 export type EffectType = {
   id: string;
@@ -159,46 +152,10 @@ export const EFFECTS: EffectDef[] = [
   ),
 ];
 
-/* ----------------------------- Languages ----------------------------- */
+/** English only — translation UI removed. */
+export const LANGUAGES: Array<[string, string]> = [['en', 'English']];
 
-// Source UI is English. 'auto' keeps original English text (recommended default).
-export const LANGUAGES: Array<[string, string]> = [
-  ['auto', 'English'],
-  ['hi', 'Hindi'], ['es', 'Spanish'], ['fr', 'French'], ['de', 'German'], ['pt', 'Portuguese'],
-  ['ar', 'Arabic'], ['bn', 'Bengali'], ['zh-CN', 'Chinese (Simplified)'], ['zh-TW', 'Chinese (Traditional)'],
-  ['ja', 'Japanese'], ['ko', 'Korean'], ['ru', 'Russian'], ['tr', 'Turkish'], ['vi', 'Vietnamese'],
-  ['id', 'Indonesian'], ['th', 'Thai'], ['it', 'Italian'], ['pl', 'Polish'], ['nl', 'Dutch'],
-  ['uk', 'Ukrainian'], ['ur', 'Urdu'], ['ta', 'Tamil'], ['te', 'Telugu'], ['mr', 'Marathi'],
-  ['gu', 'Gujarati'], ['kn', 'Kannada'], ['ml', 'Malayalam'], ['pa', 'Punjabi'], ['ne', 'Nepali'],
-  ['af', 'Afrikaans'], ['sq', 'Albanian'], ['am', 'Amharic'], ['hy', 'Armenian'], ['as', 'Assamese'],
-  ['ay', 'Aymara'], ['az', 'Azerbaijani'], ['bm', 'Bambara'], ['eu', 'Basque'], ['be', 'Belarusian'],
-  ['bho', 'Bhojpuri'], ['bs', 'Bosnian'], ['bg', 'Bulgarian'], ['ca', 'Catalan'], ['ceb', 'Cebuano'],
-  ['co', 'Corsican'], ['hr', 'Croatian'], ['cs', 'Czech'], ['da', 'Danish'], ['dv', 'Dhivehi'],
-  ['doi', 'Dogri'], ['eo', 'Esperanto'], ['et', 'Estonian'], ['ee', 'Ewe'], ['fil', 'Filipino'],
-  ['fi', 'Finnish'], ['fy', 'Frisian'], ['gl', 'Galician'], ['ka', 'Georgian'], ['el', 'Greek'],
-  ['gn', 'Guarani'], ['ht', 'Haitian Creole'], ['ha', 'Hausa'], ['haw', 'Hawaiian'], ['he', 'Hebrew'],
-  ['hmn', 'Hmong'], ['hu', 'Hungarian'], ['is', 'Icelandic'], ['ig', 'Igbo'], ['ilo', 'Ilocano'],
-  ['ga', 'Irish'], ['jv', 'Javanese'], ['kk', 'Kazakh'], ['km', 'Khmer'], ['rw', 'Kinyarwanda'],
-  ['gom', 'Konkani'], ['kri', 'Krio'], ['ku', 'Kurdish (Kurmanji)'], ['ckb', 'Kurdish (Sorani)'],
-  ['ky', 'Kyrgyz'], ['lo', 'Lao'], ['la', 'Latin'], ['lv', 'Latvian'], ['ln', 'Lingala'],
-  ['lt', 'Lithuanian'], ['lg', 'Luganda'], ['lb', 'Luxembourgish'], ['mk', 'Macedonian'], ['mai', 'Maithili'],
-  ['mg', 'Malagasy'], ['ms', 'Malay'], ['mt', 'Maltese'], ['mi', 'Maori'], ['mni-Mtei', 'Meiteilon (Manipuri)'],
-  ['lus', 'Mizo'], ['mn', 'Mongolian'], ['my', 'Myanmar (Burmese)'], ['no', 'Norwegian'], ['ny', 'Nyanja (Chichewa)'],
-  ['or', 'Odia (Oriya)'], ['om', 'Oromo'], ['ps', 'Pashto'], ['fa', 'Persian'], ['qu', 'Quechua'],
-  ['ro', 'Romanian'], ['sm', 'Samoan'], ['sa', 'Sanskrit'], ['gd', 'Scots Gaelic'], ['nso', 'Sepedi'],
-  ['sr', 'Serbian'], ['st', 'Sesotho'], ['sn', 'Shona'], ['sd', 'Sindhi'], ['si', 'Sinhala'],
-  ['sk', 'Slovak'], ['sl', 'Slovenian'], ['so', 'Somali'], ['su', 'Sundanese'], ['sw', 'Swahili'],
-  ['sv', 'Swedish'], ['tg', 'Tajik'], ['tt', 'Tatar'], ['ti', 'Tigrinya'], ['ts', 'Tsonga'],
-  ['tk', 'Turkmen'], ['ak', 'Twi'], ['ug', 'Uyghur'], ['uz', 'Uzbek'], ['cy', 'Welsh'],
-  ['xh', 'Xhosa'], ['yi', 'Yiddish'], ['yo', 'Yoruba'], ['zu', 'Zulu'], ['en', 'English (Google)'],
-];
-
-const GT_CODE: Record<string, string> = { he: 'iw', fil: 'tl' };
-export const gtCode = (lang: string) => GT_CODE[lang] || lang;
-
-const RTL = new Set(['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'ug', 'yi', 'dv', 'ckb']);
-
-/* ------------------------- Apply helpers ------------------------- */
+export const gtCode = (lang: string) => lang;
 
 export type CssState = { vars: Record<string, string>; anim: boolean; dir: 'ltr' | 'rtl' };
 
@@ -209,7 +166,7 @@ export function sanitizeSettings(raw: Partial<SiteSettings> | null | undefined):
   if (!THEMES.some((t) => t.id === s.theme)) s.theme = DEFAULT_SETTINGS.theme;
   if (!ANIMATIONS.some((a) => a.id === s.animation)) s.animation = DEFAULT_SETTINGS.animation;
   if (!EFFECTS.some((e) => e.id === s.effect)) s.effect = DEFAULT_SETTINGS.effect;
-  if (!LANGUAGES.some(([c]) => c === s.language)) s.language = DEFAULT_SETTINGS.language;
+  s.language = 'en';
   return s;
 }
 
@@ -222,7 +179,7 @@ export function buildCss(s: SiteSettings): CssState {
     vars['--anim-dur'] = anim.css.dur;
     vars['--anim-ease'] = anim.css.ease;
   }
-  return { vars, anim: !!anim?.css, dir: RTL.has(s.language) ? 'rtl' : 'ltr' };
+  return { vars, anim: !!anim?.css, dir: 'ltr' };
 }
 
 export function applyCssToDom(css: CssState) {
@@ -231,5 +188,5 @@ export function applyCssToDom(css: CssState) {
   Object.entries(css.vars).forEach(([k, v]) => root.style.setProperty(k, v));
   if (css.anim) root.setAttribute('data-anim', '1');
   else root.removeAttribute('data-anim');
-  root.dir = css.dir;
+  root.dir = 'ltr';
 }
