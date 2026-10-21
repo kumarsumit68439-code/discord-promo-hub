@@ -55,8 +55,6 @@ function applyAndStore(s: SiteSettings) {
   }
 }
 
-/* ---- Language (Google Translate website translator) ---- */
-
 function readTranslateTarget(): string {
   const m = document.cookie.match(/(?:^|;\s*)googtrans=([^;]*)/);
   if (!m) return '';
@@ -72,12 +70,11 @@ function writeTranslateCookie(lang: string) {
     document.cookie = `googtrans=; expires=${expired}; path=/; domain=${host}`;
     return;
   }
-  const v = `/auto/${gtCode(lang)}`;
+  const v = `/en/${gtCode(lang)}`;
   document.cookie = `googtrans=${v}; path=/`;
   document.cookie = `googtrans=${v}; path=/; domain=${host}`;
 }
 
-// Google Translate rewrites text nodes, which can make React throw on removeChild/insertBefore.
 function patchDomForTranslate() {
   const w = window as Window & { __hubTrPatched?: boolean };
   if (w.__hubTrPatched) return;
@@ -98,7 +95,12 @@ function loadTranslateScript() {
   if (document.getElementById('hub-gt-script')) return;
   const w = window as GTWindow;
   w.googleTranslateElementInit = () => {
-    if (w.google) new w.google.translate.TranslateElement({ pageLanguage: 'auto', autoDisplay: false }, 'hub-gt');
+    if (w.google) {
+      new w.google.translate.TranslateElement(
+        { pageLanguage: 'en', autoDisplay: false },
+        'hub-gt'
+      );
+    }
   };
   const s = document.createElement('script');
   s.id = 'hub-gt-script';
@@ -111,7 +113,6 @@ function syncLanguage(lang: string) {
   const want = lang === 'auto' ? '' : gtCode(lang);
   const cur = readTranslateTarget();
   if (cur !== want) {
-    // guard against reload loops if cookies are blocked
     if (sessionStorage.getItem('hub-lang-try') === want) return;
     sessionStorage.setItem('hub-lang-try', want);
     writeTranslateCookie(lang);
@@ -131,7 +132,6 @@ export default function SettingsProvider({ children }: { children: React.ReactNo
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
 
-  // 1) apply what is stored on this device
   useEffect(() => {
     const local = loadLocal();
     setSettings(local);
@@ -139,7 +139,6 @@ export default function SettingsProvider({ children }: { children: React.ReactNo
     syncLanguage(local.language);
   }, []);
 
-  // 2) once logged in, the account's saved settings win (so they follow the user on every device)
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;

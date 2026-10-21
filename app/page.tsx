@@ -123,8 +123,8 @@ export default function Home() {
       <main className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-white">Listings</h1>
-            <p className="text-[12px] text-[#6d6f78]">Public Discord & website promos</p>
+            <h1 className="text-lg font-semibold tracking-tight text-white">Listings</h1>
+            <p className="text-[12px] text-[#6d6f78]">Public Discord servers and website promos</p>
           </div>
           <div className="flex flex-1 flex-col gap-2 sm:max-w-md sm:flex-row sm:items-center">
             <div className="relative flex-1">
@@ -148,7 +148,7 @@ export default function Home() {
                       : 'bg-[#2b2d31] text-[#b5bac1] hover:bg-[#35373c]'
                   }`}
                 >
-                  {f === 'all' ? 'All' : f === 'discord' ? 'Discord' : 'Sites'}
+                  {f === 'all' ? 'All' : f === 'discord' ? 'Discord' : 'Websites'}
                 </button>
               ))}
             </div>
@@ -163,12 +163,12 @@ export default function Home() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="rounded-lg border border-dashed border-white/10 py-14 text-center">
-            <p className="text-[14px] text-[#949ba4]">Abhi koi listing nahi</p>
+            <p className="text-[14px] text-[#949ba4]">No listings yet</p>
             <button
               onClick={openPromote}
               className="mt-3 rounded-md bg-[#5865f2] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#4752c4]"
             >
-              {user ? 'Pehli post daalo' : 'Login karke post karo'}
+              {user ? 'Create the first post' : 'Log in to post'}
             </button>
           </div>
         ) : (
@@ -177,14 +177,12 @@ export default function Home() {
               <div
                 key={listing.id}
                 className={`relative flex gap-3 rounded-lg border bg-[#2b2d31] p-3.5 transition hover:border-white/10 ${
-                  isPremium(listing)
-                    ? 'border-amber-400/25'
-                    : 'border-white/[0.04]'
+                  isPremium(listing) ? 'border-amber-400/25' : 'border-white/[0.04]'
                 }`}
               >
                 {isPremium(listing) && (
                   <span className="absolute -top-2 left-3 inline-flex items-center gap-0.5 rounded bg-amber-400/90 px-1.5 py-0.5 text-[10px] font-semibold text-black">
-                    <Star className="h-2.5 w-2.5" /> boost
+                    <Star className="h-2.5 w-2.5" /> Boosted
                   </span>
                 )}
                 {user && listing.user_id === user.id && (
@@ -204,11 +202,7 @@ export default function Home() {
                       : 'bg-emerald-500/15 text-emerald-400'
                   }`}
                 >
-                  {listing.type === 'discord' ? (
-                    <Server className="h-5 w-5" />
-                  ) : (
-                    <Globe className="h-5 w-5" />
-                  )}
+                  {listing.type === 'discord' ? <Server className="h-5 w-5" /> : <Globe className="h-5 w-5" />}
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -274,13 +268,13 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
           <div className="w-full max-w-md rounded-t-xl border border-white/10 bg-[#1e1f22] p-5 sm:rounded-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-[15px] font-semibold text-white">New post</h3>
+              <h3 className="text-[15px] font-semibold text-white">New listing</h3>
               <button type="button" onClick={() => setShowForm(false)} className="text-[#949ba4] hover:text-white">
                 <X className="h-5 w-5" />
               </button>
             </div>
             {success ? (
-              <p className="py-8 text-center text-[14px] text-[#23a55a]">Posted.</p>
+              <p className="py-8 text-center text-[14px] text-[#23a55a]">Published.</p>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-3">
                 <div className="grid grid-cols-2 gap-1.5">
@@ -321,9 +315,7 @@ export default function Home() {
                     type="url"
                     value={form.url}
                     onChange={(e) => setForm({ ...form, url: e.target.value })}
-                    placeholder={
-                      form.type === 'discord' ? 'https://discord.gg/…' : 'https://…'
-                    }
+                    placeholder={form.type === 'discord' ? 'https://discord.gg/…' : 'https://…'}
                     className="w-full rounded-md border border-white/10 bg-[#2b2d31] py-2.5 pl-9 pr-3 text-[13px] text-white outline-none focus:border-[#5865f2]/50"
                   />
                 </div>
@@ -339,7 +331,7 @@ export default function Home() {
                   disabled={submitting}
                   className="w-full rounded-md bg-[#5865f2] py-2.5 text-[13px] font-medium text-white hover:bg-[#4752c4] disabled:opacity-60"
                 >
-                  {submitting ? '…' : 'Post'}
+                  {submitting ? '…' : 'Publish'}
                 </button>
               </form>
             )}

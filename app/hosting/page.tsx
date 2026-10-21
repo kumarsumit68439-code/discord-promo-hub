@@ -16,9 +16,9 @@ export default function BotHostingPage() {
       <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-white sm:text-2xl">Bot hosting</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">Bot hosting</h1>
             <p className="mt-1 max-w-lg text-[13px] leading-relaxed text-[#949ba4]">
-              Client ID + token lagao, modules chuno. Channel IDs optional — baad mein bhi add kar sakte ho.
+              Add your Client ID and bot token, then pick modules. Channel IDs are optional — you can fill them in later.
             </p>
           </div>
           <div className="flex gap-2">
@@ -42,11 +42,11 @@ export default function BotHostingPage() {
         {showSetup && (
           <section className="mb-6 rounded-xl border border-white/[0.06] bg-[#2b2d31] p-4 text-[13px] leading-relaxed text-[#b5bac1]">
             <ol className="list-decimal space-y-1.5 pl-4">
-              <li>Discord Developer Portal → New Application → Bot → copy Client ID + Token.</li>
-              <li>Intents: Server Members on. AI / ticket / levels ke liye Message Content bhi on.</li>
-              <li>Neeche form fill → Save. Invite link se bot server mein daalo.</li>
-              <li>Bot role hierarchy mein upar rakho (roles dena ho to).</li>
-              <li>Railway pe worker chalna chahiye (SUPABASE_URL + SERVICE_ROLE_KEY).</li>
+              <li>Discord Developer Portal → New Application → Bot → copy Client ID and Token.</li>
+              <li>Enable Server Members Intent. For AI / tickets / levels, also enable Message Content Intent.</li>
+              <li>Fill the form below → Save. Invite the bot to your server.</li>
+              <li>Place the bot role above any roles it needs to assign.</li>
+              <li>Keep the Railway worker running (SUPABASE_URL + SERVICE_ROLE_KEY).</li>
             </ol>
           </section>
         )}
@@ -54,15 +54,15 @@ export default function BotHostingPage() {
         <HostedBots />
 
         <section className="mt-6 rounded-xl border border-white/[0.06] bg-[#2b2d31] p-4">
-          <p className="text-[13px] font-medium text-white">24/7 worker</p>
+          <p className="text-[13px] font-medium text-white">Always-on worker</p>
           <p className="mt-1 text-[12px] leading-relaxed text-[#949ba4]">
-            Site Vercel pe hai. Bots Railway (ya koi VPS) pe chalte hain — wahi gateway open rakhta hai.
+            This website runs on Vercel. Bots stay online through the Railway worker that holds the Discord gateway open.
           </p>
         </section>
 
         <section className="mt-4 rounded-xl border border-white/[0.04] p-4">
           <p className="text-[12px] text-[#6d6f78]">
-            Moderation / kick / ban tabhi kaam karega jab server pe bot ko permission mile aur role hierarchy allow kare.{' '}
+            Kick, ban, and role actions only work when the bot has permission and is high enough in the role hierarchy.{' '}
             <a
               className="inline-flex items-center gap-1 text-[#949ba4] underline-offset-2 hover:text-[#dbdee1] hover:underline"
               href="https://discord.com/developers/docs/topics/permissions"

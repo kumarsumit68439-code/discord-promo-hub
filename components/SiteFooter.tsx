@@ -21,7 +21,7 @@ export default function SiteFooter() {
         <div className="space-y-1">
           <p className="text-[13px] font-medium text-[#dbdee1]">Promo Hub</p>
           <p className="max-w-xs text-[12px] leading-relaxed text-[#6d6f78]">
-            Servers, websites, bots — jo promote karna hai, yahan daal do.
+            Promote Discord servers and websites. Host bots. Chat with people.
           </p>
         </div>
         <div className="flex flex-wrap gap-x-5 gap-y-2">
@@ -30,6 +30,7 @@ export default function SiteFooter() {
           {link('/messages', 'Chat')}
           {link('/hosting', 'Bots')}
           {link('/music', 'Music')}
+          {link('/settings', 'Settings')}
           {link('/rules', 'Rules')}
           {id && link(`/u/${id}`, 'Profile')}
           {isAdmin && link('/admin', 'Admin')}
