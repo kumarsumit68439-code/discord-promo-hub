@@ -1,5 +1,6 @@
 # Persistent Discord Gateway worker — runs 24/7 on Railway / VPS
-FROM node:20-bookworm-slim
+# Node 22 has native WebSocket, which @supabase/supabase-js realtime requires.
+FROM node:22-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
