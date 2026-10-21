@@ -67,6 +67,7 @@ function createBot({ token, clientId, config = {}, label = clientId }) {
   if (has('ai') && config.ai?.apiKey) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
   const client = new Client({ intents, partials: [Partials.Channel] });
 
+  const aiLastUse = new Map(); // user id -> last AI request time (ms)
   const inviteUses = new Map();
   const inviteCounts = new Map(); // in-memory; resets on restart
   const key = (g, u) => g + ':' + u;
@@ -102,6 +103,37 @@ function createBot({ token, clientId, config = {}, label = clientId }) {
     config.onReady?.();
   });
 
+  // Builds and posts the welcome message. Used for real joins and for the dashboard's
+  // "Send test welcome" button (test = true). Throws so the caller can report the reason.
+  async function sendWelcome(member, inviterId, test = false) {
+    const channel = await member.guild.channels.fetch(config.welcomeChannelId).catch(() => null);
+    if (!channel?.isTextBased()) throw new Error('Welcome channel not found or not a text channel.');
+    const title = fillTemplate(config.welcomeTitle || 'Welcome to {server}!', member).slice(0, 256);
+    const desc = fillTemplate(config.welcomeMessage || 'Welcome {user}! You are member **#{count}**.', member).slice(0, 4000);
+    const embed = new EmbedBuilder().setColor(0x5865f2)
+      .setTitle(title)
+      .setDescription(desc)
+      .setTimestamp();
+    if (has('invite')) embed.addFields({ name: 'Invited by', value: inviterId ? '<@' + inviterId + '>' : 'Unknown / vanity invite', inline: true });
+    if (test) embed.setFooter({ text: 'Test message sent from the Discord Promo Hub dashboard' });
+    const payload = { content: '' + member, embeds: [embed] };
+    const png = config.welcomeImage === false ? null : await renderWelcomeCard(member);
+    if (png) { payload.files = [new AttachmentBuilder(png, { name: 'welcome.png' })]; embed.setImage('attachment://welcome.png'); }
+    else embed.setThumbnail(member.user.displayAvatarURL());
+    await channel.send(payload);
+  }
+
+  // Dashboard test: posts the configured welcome message once, using the bot itself as the
+  // "new member". It does not give any role and needs no privileged intent.
+  async function sendTestWelcome() {
+    if (!has('welcome')) throw new Error('Welcome module is not turned on for this bot.');
+    if (!config.welcomeChannelId) throw new Error('Set a welcome channel ID first.');
+    const guild = (config.guildId && client.guilds.cache.get(config.guildId)) || client.guilds.cache.first();
+    if (!guild) throw new Error('Bot is not in any server yet.');
+    const me = guild.members.me || await guild.members.fetchMe();
+    await sendWelcome(me, null, true);
+  }
+
   client.on('inviteCreate', i => { if (!inviteUses.has(i.guild.id)) inviteUses.set(i.guild.id, new Map()); inviteUses.get(i.guild.id).set(i.code, i.uses ?? 0); });
   client.on('inviteDelete', i => inviteUses.get(i.guild.id)?.delete(i.code));
 
@@ -117,23 +149,8 @@ function createBot({ token, clientId, config = {}, label = clientId }) {
         inviteUses.set(member.guild.id, new Map(current.map(i => [i.code, i.uses ?? 0])));
       } catch (err) { warn('invite tracking unavailable:', err.message); }
     }
-    if (has('welcome') && config.welcomeChannelId) {
-      const channel = await member.guild.channels.fetch(config.welcomeChannelId).catch(() => null);
-      if (channel?.isTextBased()) {
-        const title = fillTemplate(config.welcomeTitle || 'Welcome to {server}!', member).slice(0, 256);
-        const desc = fillTemplate(config.welcomeMessage || 'Welcome {user}! You are member **#{count}**.', member).slice(0, 4000);
-        const embed = new EmbedBuilder().setColor(0x5865f2)
-          .setTitle(title)
-          .setDescription(desc)
-          .setTimestamp();
-        if (has('invite')) embed.addFields({ name: 'Invited by', value: inviterId ? '<@' + inviterId + '>' : 'Unknown / vanity invite', inline: true });
-        const payload = { content: '' + member, embeds: [embed] };
-        const png = config.welcomeImage === false ? null : await renderWelcomeCard(member);
-        if (png) { payload.files = [new AttachmentBuilder(png, { name: 'welcome.png' })]; embed.setImage('attachment://welcome.png'); }
-        else embed.setThumbnail(member.user.displayAvatarURL());
-        await channel.send(payload).catch(err => warn('welcome send failed:', err.message));
-      }
-    }
+    if (has('welcome') && config.welcomeChannelId)
+      await sendWelcome(member, inviterId).catch(err => warn('welcome send failed:', err.message));
     if (has('welcome') && config.welcomeRoleId) {
       const role = await member.guild.roles.fetch(config.welcomeRoleId).catch(() => null);
       if (role && role.position < member.guild.members.me.roles.highest.position)
@@ -154,10 +171,17 @@ function createBot({ token, clientId, config = {}, label = clientId }) {
     const ai = config.ai;
     if (!has('ai') || !ai?.apiKey || !ai?.model || message.author.bot || !message.guild) return;
     if (config.guildId && message.guild.id !== config.guildId) return;
-    if (config.aiChannelId && message.channelId !== config.aiChannelId) return;
-    if (!message.mentions.has(client.user) && !message.content.startsWith('!ai ')) return;
+    // Inside the configured AI channel the bot answers every message, no tag needed.
+    // Without an AI channel it only answers when mentioned or when the message starts with "!ai ".
+    const inAiChannel = Boolean(config.aiChannelId) && message.channelId === config.aiChannelId;
+    if (config.aiChannelId && !inAiChannel) return;
+    if (!inAiChannel && !message.mentions.has(client.user) && !message.content.startsWith('!ai ')) return;
     const prompt = message.content.replace(/<@!?\d+>/g, '').replace(/^!ai\s*/i, '').trim();
     if (!prompt) return;
+    // Small per-user cooldown so chatting freely in the channel cannot burn through the AI key.
+    const last = aiLastUse.get(message.author.id) || 0;
+    if (Date.now() - last < 3000) return;
+    aiLastUse.set(message.author.id, Date.now());
     await message.channel.sendTyping().catch(() => null);
     try {
       const base = (ai.baseUrl || 'https://api.groq.com/openai/v1').replace(/\/$/, '');
@@ -245,6 +269,7 @@ function createBot({ token, clientId, config = {}, label = clientId }) {
 
   return {
     client,
+    sendTestWelcome,
     start: () => client.login(token),
     stop: async () => { try { await client.destroy(); } catch (_) { /* ignore */ } },
   };

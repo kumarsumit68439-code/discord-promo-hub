@@ -4,14 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   Bot, MessageCircle, Sparkles, Clock3, Ban, Users, Ticket,
-  Copy, ExternalLink, Trash2, Power, Pencil, CheckCircle2, ShieldCheck,
+  Copy, ExternalLink, Trash2, Power, Pencil, CheckCircle2, ShieldCheck, Send,
 } from 'lucide-react';
 
 const MODULES = [
   { id: 'welcome', title: 'Welcome Bot', icon: MessageCircle, detail: 'Welcome image + custom message when a member joins, optional auto role, goodbye message.' },
   { id: 'moderation', title: 'Timeout Bot', icon: Clock3, detail: '/timeout and /untimeout with permission and role-hierarchy checks.' },
   { id: 'ban', title: 'Ban Bot', icon: Ban, detail: '/ban and /unban with moderation log.' },
-  { id: 'ai', title: 'AI Chat Bot', icon: Sparkles, detail: 'Mention the bot or use !ai to chat. Needs an AI provider key saved below.' },
+  { id: 'ai', title: 'AI Chat Bot', icon: Sparkles, detail: 'Set an AI channel ID and the bot answers every message in that channel, no tag needed. Without a channel, mention the bot or use !ai. Needs an AI provider key saved below.' },
   { id: 'supporter', title: 'Supporter Bot', icon: Users, detail: '/supporter grant and revoke for a configured role.' },
   { id: 'invite', title: 'Invite Bot', icon: Ticket, detail: 'Tracks who invited whom, /invites and /invite-leaderboard.' },
 ];
@@ -20,6 +20,7 @@ type BotRow = {
   id: string; client_id: string; bot_name: string | null; modules: string[];
   config: Record<string, unknown>; enabled: boolean; status: string;
   last_error: string | null; last_heartbeat: string | null;
+  test_requested_at?: string | null; test_result?: string | null; test_done_at?: string | null;
 };
 
 type Form = {
@@ -141,6 +142,15 @@ export default function HostedBots() {
     finally { setBusy(false); }
   }
 
+  // Queues one sample welcome message. The 24/7 worker posts it in the welcome channel within
+  // a few seconds; the result shows up on the bot card through the 5s status refresh.
+  async function testWelcome(b: BotRow) {
+    setBusy(true); setError(''); setMessage('');
+    try { await call({ action: 'test_welcome', id: b.id }); await refresh(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Test failed'); }
+    finally { setBusy(false); }
+  }
+
   async function remove(b: BotRow) {
     if (!window.confirm('Delete this bot and its stored token?')) return;
     setBusy(true); setError('');
@@ -243,7 +253,7 @@ export default function HostedBots() {
                 <input inputMode="numeric" value={form.supporterRoleId} onChange={(e) => set('supporterRoleId', e.target.value)} className={input} /></div>
             )}
             {has('ai') && (<>
-              <div><label className="text-sm text-gray-300">AI channel ID <span className="text-xs text-gray-500">optional</span></label>
+              <div><label className="text-sm text-gray-300">AI channel ID <span className="text-xs text-gray-500">bot replies to every message here, no tag needed</span></label>
                 <input inputMode="numeric" value={form.aiChannelId} onChange={(e) => set('aiChannelId', e.target.value)} className={input} /></div>
               <div><label className="text-sm text-gray-300">AI provider</label>
                 <select value={form.aiProvider} onChange={(e) => set('aiProvider', e.target.value)} className={input}>
@@ -286,8 +296,22 @@ export default function HostedBots() {
                   {v.label === 'online' && b.last_heartbeat && (
                     <p className="mt-1 text-xs text-gray-500">Live: last heartbeat {new Date(b.last_heartbeat).toLocaleTimeString()}</p>
                   )}
+                  {b.test_requested_at && (Date.now() - new Date(b.test_requested_at).getTime() > 45_000
+                    ? <p className="mt-1 text-xs text-amber-300">Test not picked up. The worker may be offline. Try again in a minute.</p>
+                    : <p className="mt-1 text-xs text-indigo-300">Test requested, the worker will post it in a few seconds…</p>)}
+                  {!b.test_requested_at && b.test_result && (
+                    <p className={'mt-1 text-xs ' + (b.test_result.startsWith('Failed') ? 'text-rose-300' : 'text-emerald-300')}>{b.test_result}</p>
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {b.modules.includes('welcome') && (
+                    <button disabled={busy || !b.enabled || v.label !== 'online' || Boolean(b.test_requested_at && Date.now() - new Date(b.test_requested_at).getTime() < 45_000)}
+                      onClick={() => void testWelcome(b)}
+                      className="rounded-lg border border-discord-blurple/40 bg-discord-blurple/10 px-3 py-2 text-xs font-semibold text-indigo-200 disabled:opacity-40"
+                      title={v.label === 'online' ? 'Post a sample welcome message in your welcome channel' : 'The bot must be online to send a test'}>
+                      <Send className="mr-1.5 inline h-3.5 w-3.5" />Send test welcome
+                    </button>
+                  )}
                   <span className={'rounded-full px-3 py-1 text-xs ' + v.style}>
                     {v.label === 'online' && <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-300" />}
                     {v.label}

@@ -8,6 +8,7 @@ const { createBot } = require('./bot');
 const AI_BASE = { groq: 'https://api.groq.com/openai/v1', xai: 'https://api.x.ai/v1' };
 const SYNC_MS = 30_000;
 const HEARTBEAT_MS = 60_000;
+const TEST_POLL_MS = 5_000;
 const RETRY_AFTER_FAIL_MS = 120_000; // do not hammer Discord login (daily identify limit) after a failed login
 
 // Discord application flags for privileged gateway intents.
@@ -22,6 +23,14 @@ function friendlyError(raw) {
   if (/disallowed intents/i.test(m)) return 'Privileged intents are off and could not be enabled automatically. Discord Developer Portal > Bot: turn ON Server Members Intent (and Message Content Intent for AI chat), then Save.';
   if (/invalid token|TokenInvalid/i.test(m)) return 'Invalid bot token. Reset the token in the Discord Developer Portal and save it here again.';
   return m;
+}
+
+// Reason shown on the website when the test welcome message could not be posted.
+function friendlyTestError(err) {
+  const code = err && err.code;
+  if (code === 50013) return 'the bot is missing permission in the welcome channel (needs View Channel, Send Messages, Embed Links and Attach Files).';
+  if (code === 50001 || code === 10003) return 'the bot cannot see the welcome channel. Check the channel ID and the channel permissions.';
+  return String((err && err.message) || err || 'unknown error').slice(0, 250);
 }
 
 // "Used disallowed intents" means the Developer Portal toggles are off. The bot owner's own
@@ -147,7 +156,7 @@ async function runHosted() {
       const ch = await g.channels.fetch(channelId).catch(() => null);
       if (ch?.isTextBased()) {
         const name = entry.bot.client.user?.username || 'Bot';
-        await ch.send('\u2705 **' + name + '** is online 24/7 and connected to Discord Promo Hub.').catch(() => null);
+        await ch.send('✅ **' + name + '** is online 24/7 and connected to Discord Promo Hub.').catch(() => null);
         return;
       }
     }
@@ -216,9 +225,35 @@ async function runHosted() {
     }
   }
 
+  // Dashboard "Send test welcome" button: the website queues a request in Supabase, the worker
+  // picks it up within a few seconds, posts one welcome message and writes the result back.
+  let testBusy = false;
+  async function processTestRequests() {
+    if (testBusy) return;
+    testBusy = true;
+    try {
+      const { data, error } = await db.rpc('list_pending_test_welcomes');
+      if (error) { console.error('test request poll failed:', error.message); return; }
+      for (const { id } of data || []) {
+        const entry = running.get(id);
+        if (entry && !entry.bot.client.isReady()) continue; // still connecting, try again next poll
+        let result;
+        if (!entry) {
+          result = 'Failed: the bot is not online yet. Fix the error shown on its card, then try again.';
+        } else {
+          try { await entry.bot.sendTestWelcome(); result = 'Test welcome message sent to your welcome channel.'; }
+          catch (err) { result = 'Failed: ' + friendlyTestError(err); }
+        }
+        const { error: doneError } = await db.rpc('finish_test_welcome', { p_id: id, p_result: result });
+        if (doneError) console.error('saving test result failed:', doneError.message);
+      }
+    } finally { testBusy = false; }
+  }
+
   await sync();
   setInterval(() => sync().catch(e => console.error('sync error', e.message)), SYNC_MS);
   setInterval(() => heartbeat().catch(() => null), HEARTBEAT_MS);
+  setInterval(() => processTestRequests().catch(e => console.error('test request error', e.message)), TEST_POLL_MS);
   console.log('Hosted mode running. Bots:', running.size);
 }
 
