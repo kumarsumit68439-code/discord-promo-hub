@@ -3,16 +3,15 @@
 import { useMemo, useState } from 'react';
 import SiteHeader from '@/components/SiteHeader';
 import { useSettings } from '@/components/SettingsProvider';
-import { THEMES, ANIMATIONS, EFFECTS, LANGUAGES } from '@/lib/siteSettings';
-import { Palette, Wand2, Sparkles, Languages, RotateCcw, Check, Search } from 'lucide-react';
+import { THEMES, ANIMATIONS, EFFECTS } from '@/lib/siteSettings';
+import { Palette, Wand2, Sparkles, RotateCcw, Check, Search } from 'lucide-react';
 
-type Tab = 'theme' | 'animation' | 'effect' | 'language';
+type Tab = 'theme' | 'animation' | 'effect';
 
 const TABS: { id: Tab; label: string; icon: typeof Palette }[] = [
   { id: 'theme', label: 'Themes', icon: Palette },
   { id: 'animation', label: 'Animations', icon: Wand2 },
   { id: 'effect', label: 'Effects', icon: Sparkles },
-  { id: 'language', label: 'Language', icon: Languages },
 ];
 
 export default function SettingsPage() {
@@ -24,10 +23,6 @@ export default function SettingsPage() {
   const themes = useMemo(() => THEMES.filter((t) => t.name.toLowerCase().includes(s)), [s]);
   const anims = useMemo(() => ANIMATIONS.filter((a) => a.name.toLowerCase().includes(s)), [s]);
   const effects = useMemo(() => EFFECTS.filter((e) => e.name.toLowerCase().includes(s)), [s]);
-  const langs = useMemo(
-    () => LANGUAGES.filter(([c, n]) => n.toLowerCase().includes(s) || c.toLowerCase().includes(s)),
-    [s]
-  );
 
   const tile = (active: boolean) =>
     `relative rounded-lg border p-2.5 text-left text-[12px] transition ${
@@ -44,7 +39,7 @@ export default function SettingsPage() {
           <div>
             <h1 className="text-lg font-semibold text-white">Settings</h1>
             <p className="mt-0.5 text-[12px] text-[#6d6f78]">
-              Theme, motion, and language apply across the site
+              Theme and motion · site language is English only
               {saving ? ' · saving…' : ''}
             </p>
           </div>
@@ -137,23 +132,6 @@ export default function SettingsPage() {
                   </span>
                   <span className="block truncate font-medium">{e.name}</span>
                   {settings.effect === e.id && <Check className="absolute right-2 top-2 h-3.5 w-3.5 text-white" />}
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {tab === 'language' && (
-          <section>
-            <p className="mb-2 text-[11px] leading-relaxed text-[#6d6f78]">
-              Default is <strong className="text-[#b5bac1]">English</strong>. Pick another language to translate the whole site (Google Translate). Change applies after a short reload.
-            </p>
-            <div translate="no" className="notranslate grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-              {langs.map(([code, name]) => (
-                <button key={code} type="button" onClick={() => update({ language: code })} className={tile(settings.language === code)}>
-                  <span className="block truncate font-medium">{name}</span>
-                  <span className="block text-[10px] text-[#6d6f78]">{code === 'auto' ? 'default' : code}</span>
-                  {settings.language === code && <Check className="absolute right-2 top-2 h-3.5 w-3.5 text-white" />}
                 </button>
               ))}
             </div>
