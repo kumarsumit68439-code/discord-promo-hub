@@ -1,4 +1,4 @@
-import { MessageCircle, LifeBuoy, Ticket, ShieldCheck, Clock3, Mic, ShieldAlert, Trophy, UserPlus, Ban, Sparkles, Users } from 'lucide-react';
+import { MessageCircle, LifeBuoy, Ticket, ShieldCheck, Clock3, Mic, ShieldAlert, Trophy, UserPlus, Ban, Sparkles, Users, Music2 } from 'lucide-react';
 
 export const BOT_MODULES = [
   { id: 'welcome', title: 'Welcome Bot', icon: MessageCircle, detail: 'Welcome image + custom message when a member joins, optional auto role, goodbye message. (Free)' },
@@ -14,5 +14,6 @@ export const BOT_MODULES = [
   { id: 'ban', title: 'Ban Bot', icon: Ban, detail: '/ban and /unban with moderation log.' },
   { id: 'ai', title: 'AI Chat Bot', icon: Sparkles, detail: 'AI channel replies. Needs AI provider key.' },
   { id: 'supporter', title: 'Supporter Bot', icon: Users, detail: '/supporter grant and revoke.' },
+  { id: 'music', title: 'Music Bot (YouTube VC)', icon: Music2, detail: '/play /skip /stop /queue — YouTube in voice channel. (Premium)' },
   { id: 'invite', title: 'Invite Tracker', icon: Ticket, detail: '/invites and /invite-leaderboard.' },
 ] as const;

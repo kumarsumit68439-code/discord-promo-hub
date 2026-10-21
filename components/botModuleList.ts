@@ -11,6 +11,7 @@ import {
   Ban,
   Sparkles,
   Users,
+  Music2,
 } from 'lucide-react';
 
 export const HOSTING_MODULES = [
@@ -27,5 +28,6 @@ export const HOSTING_MODULES = [
   { id: 'ban', title: 'Ban Bot', icon: Ban, detail: '/ban and /unban with moderation log.' },
   { id: 'ai', title: 'AI Chat Bot', icon: Sparkles, detail: 'AI channel replies. Needs an AI provider key.' },
   { id: 'supporter', title: 'Supporter Bot', icon: Users, detail: '/supporter grant and revoke for a configured role.' },
+  { id: 'music', title: 'Music Bot (YouTube VC)', icon: Music2, detail: '/play /skip /stop /queue /pause /resume — YouTube search in voice channel. (Premium)' },
   { id: 'invite', title: 'Invite Tracker', icon: Ticket, detail: 'Tracks who invited whom, /invites and /invite-leaderboard.' },
 ] as const;
