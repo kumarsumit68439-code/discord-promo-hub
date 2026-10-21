@@ -6,6 +6,7 @@ import { supabase, Profile } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
+import PremiumBadge from '@/components/PremiumBadge';
 import { Search, User, MessagesSquare, UserPlus, Radio } from 'lucide-react';
 
 export default function UsersPage() {
@@ -27,7 +28,6 @@ export default function UsersPage() {
   useEffect(() => {
     loadUsers();
 
-    // Realtime: new users appear instantly
     const channel = supabase
       .channel('profiles-live')
       .on(
@@ -85,7 +85,7 @@ export default function UsersPage() {
           </span>
         </div>
         <p className="mb-4 text-sm text-gray-400">
-          Naye users login ke baad yahan real-time dikhte hain · Follow · Message
+          Premium users · Naye users live · Follow · Message
         </p>
 
         <div className="relative mb-6">
@@ -109,21 +109,34 @@ export default function UsersPage() {
               return (
                 <div
                   key={u.id}
-                  className="flex items-center gap-3 rounded-xl border border-white/5 bg-discord-card p-3"
+                  className={
+                    'flex items-center gap-3 rounded-xl border p-3 ' +
+                    (u.is_premium
+                      ? 'border-amber-400/20 bg-gradient-to-r from-amber-500/5 to-discord-card'
+                      : 'border-white/5 bg-discord-card')
+                  }
                 >
                   <Link href={`/u/${u.id}`} className="flex min-w-0 flex-1 items-center gap-3">
                     {u.avatar_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={u.avatar_url} alt="" className="h-11 w-11 rounded-full" />
+                      <img
+                        src={u.avatar_url}
+                        alt=""
+                        className={
+                          'h-11 w-11 rounded-full ' +
+                          (u.is_premium ? 'ring-2 ring-amber-400/50' : '')
+                        }
+                      />
                     ) : (
                       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-discord-blurple">
                         <User className="h-5 w-5 text-white" />
                       </div>
                     )}
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-white">
-                        {u.display_name || u.discord_username || 'User'}
-                        {isMe && <span className="ml-1 text-xs text-discord-blurple">(you)</span>}
+                      <p className="flex flex-wrap items-center gap-1.5 truncate font-medium text-white">
+                        <span className="truncate">{u.display_name || u.discord_username || 'User'}</span>
+                        {isMe && <span className="text-xs text-discord-blurple">(you)</span>}
+                        <PremiumBadge is_premium={u.is_premium} premium_until={u.premium_until} />
                       </p>
                       {u.bio ? (
                         <p className="truncate text-xs text-gray-400">{u.bio}</p>
