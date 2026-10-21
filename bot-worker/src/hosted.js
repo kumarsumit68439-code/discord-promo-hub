@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws'); // Node 20 has no native WebSocket; supabase-js realtime needs a transport (ws ships with discord.js)
 const { createBot } = require('./bot');
 
 // Multi-tenant runner: reads bots saved from the website (tokens from Supabase Vault),
@@ -9,7 +10,10 @@ async function runHosted() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for hosted mode');
-  const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const db = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { transport: ws },
+  });
   const running = new Map(); // bot id -> { bot, updated_at }
   const SYNC_MS = 30_000;
 
