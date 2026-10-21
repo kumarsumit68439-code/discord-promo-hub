@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
@@ -20,7 +20,7 @@ type Payment = {
   created_at: string;
 };
 
-export default function CheckoutPage() {
+function CheckoutInner() {
   const { user, loading } = useAuth();
   const search = useSearchParams();
   const planId = search.get('plan') || 'starter';
@@ -215,5 +215,19 @@ export default function CheckoutPage() {
       </main>
       <SiteFooter />
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#17181c] text-sm text-[#949ba4]">
+          Loading checkout…
+        </div>
+      }
+    >
+      <CheckoutInner />
+    </Suspense>
   );
 }
