@@ -9,7 +9,7 @@ import BottomNav from '@/components/BottomNav';
 
 export const metadata: Metadata = {
   title: 'Promo Hub',
-  description: 'Discord servers aur websites promote karo. Bots, chat, music — ek jagah.',
+  description: 'Promote Discord servers and websites. Host bots, chat, and music in one place.',
 };
 
 const INIT_SCRIPT = `(function(){try{var c=JSON.parse(localStorage.getItem('hub-css')||'null');if(!c)return;var d=document.documentElement;for(var k in c.vars){d.style.setProperty(k,c.vars[k]);}if(c.anim){d.setAttribute('data-anim','1');}if(c.dir){d.dir=c.dir;}}catch(e){}})();`;

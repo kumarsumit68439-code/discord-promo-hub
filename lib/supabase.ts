@@ -37,6 +37,8 @@ export type Profile = {
   /** Public: true while premium plan active (set on payment approve) */
   is_premium?: boolean | null;
   premium_until?: string | null;
+  admin_panel_until?: string | null;
+  is_vip?: boolean | null;
   is_banned: boolean | null;
   is_permanent_ban: boolean | null;
   ban_until: string | null;
@@ -124,25 +126,29 @@ export async function ensureProfile(user: {
   user_metadata?: Record<string, unknown>;
   identities?: Array<{ provider: string; id: string; identity_data?: Record<string, unknown> }>;
 }) {
-  const au = getDiscordProfile(user);
-  const { data: existing } = await supabase
-    .from('profiles')
-    .select('display_name, bio, role')
-    .eq('id', user.id)
-    .maybeSingle();
+  try {
+    const au = getDiscordProfile(user);
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('display_name, bio, role')
+      .eq('id', user.id)
+      .maybeSingle();
 
-  const { error } = await supabase.from('profiles').upsert(
-    {
-      id: user.id,
-      display_name: existing?.display_name || au.username,
-      bio: existing?.bio ?? null,
-      discord_username: au.username,
-      avatar_url: au.avatarUrl,
-      discord_id: au.discordId,
-      email: user.email || null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'id' }
-  );
-  if (error) console.error('ensureProfile', error.message);
+    const { error } = await supabase.from('profiles').upsert(
+      {
+        id: user.id,
+        display_name: existing?.display_name || au.username,
+        bio: existing?.bio ?? null,
+        discord_username: au.username,
+        avatar_url: au.avatarUrl,
+        discord_id: au.discordId,
+        email: user.email || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    if (error) console.error('ensureProfile', error.message);
+  } catch (e) {
+    console.error('ensureProfile', e);
+  }
 }
