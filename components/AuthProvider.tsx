@@ -26,6 +26,7 @@ type AuthCtx = {
   profile: Profile | null;
   role: SiteRole;
   isAdmin: boolean;
+  isBoughtAdmin: boolean;
   isOwner: boolean;
   isActingOwner: boolean;
   isModerator: boolean;
@@ -33,6 +34,7 @@ type AuthCtx = {
   isHelper: boolean;
   isStaff: boolean;
   isStaffLike: boolean;
+  canAssignRoles: boolean;
   appLocked: boolean;
   appLockMessage: string;
   loading: boolean;
@@ -136,18 +138,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const role: SiteRole = bootstrapOwner ? 'owner' : ((profile?.role as SiteRole) || 'user');
 
+  const adminUntil = profile?.admin_panel_until ? new Date(profile.admin_panel_until as string) : null;
+  const isBoughtAdmin = Boolean(adminUntil && adminUntil.getTime() > Date.now());
+
   const isOwner = role === 'owner';
   const isActingOwner = role === 'acting_owner' || role === 'owner';
-  const isAdmin = ['admin', 'acting_owner', 'owner'].includes(role);
-  const isModerator = ['moderator', 'admin', 'acting_owner', 'owner'].includes(role);
-  const isDeveloper = ['developer', 'moderator', 'admin', 'acting_owner', 'owner'].includes(role);
-  const isHelper = ['helper', 'developer', 'moderator', 'admin', 'acting_owner', 'owner'].includes(role);
-  const isStaff = ['staff', 'helper', 'developer', 'moderator', 'admin', 'acting_owner', 'owner'].includes(role);
-  const staffLike = isStaffLike(role);
+  const isFullAdmin = ['admin', 'acting_owner', 'owner'].includes(role);
+  const isAdmin = isFullAdmin || isBoughtAdmin;
+  const isModerator = isFullAdmin || role === 'moderator';
+  const isDeveloper = isModerator || role === 'developer';
+  const isHelper = isDeveloper || role === 'helper';
+  const isStaff = isHelper || role === 'staff';
+  const staffLike = isStaffLike(role) || isBoughtAdmin;
+  const canAssignRolesFlag = isFullAdmin || role === 'helper';
 
   const banned = profile ? isCurrentlyBanned(profile) : false;
-
-  // App lock: block normal users only — staff+ can still use site
   const blockedByLock = appLocked && user && !staffLike;
 
   return (
@@ -158,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         role,
         isAdmin,
+        isBoughtAdmin,
         isOwner,
         isActingOwner,
         isModerator,
@@ -165,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isHelper,
         isStaff,
         isStaffLike: staffLike,
+        canAssignRoles: canAssignRolesFlag,
         appLocked,
         appLockMessage,
         loading,
@@ -189,14 +196,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         />
       ) : blockedByLock ? (
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#111214] px-6 text-center">
-          <p className="text-2xl font-bold text-white">🔒 Site Locked</p>
+          <p className="text-2xl font-bold text-white">Site locked</p>
           <p className="max-w-md text-sm text-gray-400">{appLockMessage}</p>
-          <p className="text-xs text-gray-600">Only staff / admin / owner can access right now</p>
-          <button
-            onClick={signOut}
-            className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white"
-          >
-            Logout
+          <p className="text-xs text-gray-600">Only staff can access right now</p>
+          <button onClick={signOut} className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white">
+            Log out
           </button>
         </div>
       ) : (
