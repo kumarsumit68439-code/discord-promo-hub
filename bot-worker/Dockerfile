@@ -1,5 +1,6 @@
 # Persistent Discord Gateway worker — runs 24/7 on Railway / VPS
 # Node 22 has native WebSocket, which @supabase/supabase-js realtime requires.
+# Rebuild: 2026-10-21 control panels + bot_commands poller
 FROM node:22-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
