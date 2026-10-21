@@ -22,6 +22,8 @@ import {
   Sparkles,
   Brain,
   Wallet,
+  Settings,
+  Info,
 } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 
@@ -41,6 +43,8 @@ export default function BottomNav() {
     { href: '/pricing', label: 'Plans', icon: Sparkles },
     { href: '/ai', label: 'AI', icon: Brain },
     { href: '/rules', label: 'Rules', icon: BookOpen },
+    { href: '/settings', label: 'Settings', icon: Settings },
+    { href: '/about', label: 'Contact', icon: Info },
     {
       href: appUser ? `/u/${appUser.id}` : '/profile',
       label: 'Profile',
