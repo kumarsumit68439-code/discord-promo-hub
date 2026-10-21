@@ -2,6 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 const { createBot } = require('./bot');
 const setupBuilder = require('./setup-builder');
+const musicControl = require('./music-control');
 
 const AI_BASE = { groq: 'https://api.groq.com/openai/v1', xai: 'https://api.x.ai/v1' };
 const SYNC_MS = 30_000;
@@ -171,6 +172,11 @@ async function runHosted() {
     } catch (e) {
       console.error('[' + row.client_id + '] setup attach', e.message);
     }
+    try {
+      musicControl.attach(entry.bot.client);
+    } catch (e) {
+      console.error('[' + row.client_id + '] music attach', e.message);
+    }
 
     running.set(row.id, entry);
     try {
@@ -328,8 +334,7 @@ async function runHosted() {
             status = 'error';
             result = 'Bot offline';
           } else {
-            const b = entry.bot;
-            const client = b.client;
+            const client = entry.bot.client;
             const action = cmd.action;
             const payload = cmd.payload || {};
             const channelId =
@@ -339,55 +344,10 @@ async function runHosted() {
               '';
 
             if (action === 'music_play') {
-              const url = String(payload.url || payload.query || '');
-              if (typeof b.play === 'function') result = await b.play(url, channelId);
-              else if (typeof b.playTrack === 'function') result = await b.playTrack(url, channelId);
-              else if (typeof b.musicPlay === 'function') result = await b.musicPlay(url, channelId);
-              else if (channelId) {
-                const ch = await client.channels.fetch(channelId).catch(() => null);
-                if (ch && ch.isTextBased && ch.isTextBased()) {
-                  const title = payload.title || url;
-                  await ch.send({
-                    content:
-                      '🎵 **Now playing (Promo Hub control)**\n' +
-                      title +
-                      (url ? '\n' + url : ''),
-                  });
-                  result = 'Sent to music channel';
-                } else {
-                  status = 'error';
-                  result = 'Music channel not found';
-                }
-              } else {
-                status = 'error';
-                result = 'No music channel';
-              }
-            } else if (action === 'music_skip') {
-              result =
-                typeof b.skip === 'function'
-                  ? await b.skip()
-                  : typeof b.musicSkip === 'function'
-                    ? await b.musicSkip()
-                    : 'Skip queued';
-            } else if (action === 'music_pause') {
-              result =
-                typeof b.pause === 'function'
-                  ? await b.pause()
-                  : typeof b.musicPause === 'function'
-                    ? await b.musicPause()
-                    : 'Pause queued';
-            } else if (action === 'music_resume') {
-              result =
-                typeof b.resume === 'function'
-                  ? await b.resume()
-                  : typeof b.musicResume === 'function'
-                    ? await b.musicResume()
-                    : 'Resume queued';
-            } else if (action === 'music_stop') {
-              if (typeof b.stop === 'function') result = await b.stop();
-              else if (typeof b.musicStop === 'function') result = await b.musicStop();
-              else if (typeof b.leaveVoice === 'function') result = await b.leaveVoice();
-              else result = 'Stop queued';
+              result = await musicControl.sendMiniPlayer(client, entry.row, payload, channelId);
+            } else if (action === 'music_skip' || action === 'music_pause' || action === 'music_resume' || action === 'music_stop') {
+              // Button handlers own session state; echo status for website
+              result = 'Use Discord mini-player buttons (or re-send a track)';
             } else if (action === 'announce') {
               const text = String(payload.text || '').slice(0, 1800);
               const ch = await client.channels
