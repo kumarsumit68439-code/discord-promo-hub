@@ -6,7 +6,6 @@ export const dynamic = 'force-dynamic';
 /**
  * YouTube Data API v3 search — key from Vercel env only:
  *   YOUTUBE_API_KEY
- * (not from website / Supabase Vault)
  */
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim();
@@ -21,7 +20,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          'YOUTUBE_API_KEY not configured. Add it in Vercel → Project → Settings → Environment Variables (Production + Preview), then Redeploy.',
+          'YOUTUBE_API_KEY not configured. Vercel → Project → Settings → Environment Variables → add YOUTUBE_API_KEY (Production + Preview) → Redeploy.',
       },
       { status: 503 }
     );
@@ -39,26 +38,42 @@ export async function GET(req: NextRequest) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      const msg =
-        data?.error?.message ||
-        (res.status === 403
-          ? 'YouTube API key invalid or YouTube Data API v3 not enabled / quota exceeded'
-          : 'YouTube search failed');
-      return NextResponse.json({ error: msg }, { status: res.status >= 400 && res.status < 600 ? res.status : 502 });
+      const raw = String(data?.error?.message || '');
+      let msg = raw || 'YouTube search failed';
+
+      if (/blocked|V3DataSearchService|not been used|disabled|ACCESS_TOKEN|API key not valid/i.test(raw)) {
+        msg =
+          'YouTube Search API blocked on this key. Google Cloud → enable YouTube Data API v3, key API restrictions = YouTube Data API v3 (or Don\'t restrict), Application restrictions = None, then save key + Vercel redeploy.';
+      } else if (res.status === 403) {
+        msg = raw || 'YouTube API 403: key invalid, API not enabled, or quota exceeded.';
+      }
+
+      return NextResponse.json(
+        { error: msg },
+        { status: res.status >= 400 && res.status < 600 ? res.status : 502 }
+      );
     }
 
-    const items = (data.items || []).map((it: {
-      id?: { videoId?: string };
-      snippet?: { title?: string; channelTitle?: string; thumbnails?: { medium?: { url?: string }; default?: { url?: string } } };
-    }) => ({
-      id: it.id?.videoId || '',
-      title: it.snippet?.title || 'Untitled',
-      channel: it.snippet?.channelTitle || '',
-      thumbnail:
-        it.snippet?.thumbnails?.medium?.url ||
-        it.snippet?.thumbnails?.default?.url ||
-        (it.id?.videoId ? `https://i.ytimg.com/vi/${it.id.videoId}/mqdefault.jpg` : ''),
-    })).filter((v: { id: string }) => v.id);
+    const items = (data.items || [])
+      .map(
+        (it: {
+          id?: { videoId?: string };
+          snippet?: {
+            title?: string;
+            channelTitle?: string;
+            thumbnails?: { medium?: { url?: string }; default?: { url?: string } };
+          };
+        }) => ({
+          id: it.id?.videoId || '',
+          title: it.snippet?.title || 'Untitled',
+          channel: it.snippet?.channelTitle || '',
+          thumbnail:
+            it.snippet?.thumbnails?.medium?.url ||
+            it.snippet?.thumbnails?.default?.url ||
+            (it.id?.videoId ? `https://i.ytimg.com/vi/${it.id.videoId}/mqdefault.jpg` : ''),
+        })
+      )
+      .filter((v: { id: string }) => v.id);
 
     return NextResponse.json({ items });
   } catch (e) {
