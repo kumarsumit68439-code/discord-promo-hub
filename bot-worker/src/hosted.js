@@ -10,13 +10,46 @@ const SYNC_MS = 30_000;
 const HEARTBEAT_MS = 60_000;
 const RETRY_AFTER_FAIL_MS = 120_000; // do not hammer Discord login (daily identify limit) after a failed login
 
+// Discord application flags for privileged gateway intents.
+const FLAG_MEMBERS = 1 << 14;         // GATEWAY_GUILD_MEMBERS
+const FLAG_MEMBERS_LIMITED = 1 << 15; // GATEWAY_GUILD_MEMBERS_LIMITED
+const FLAG_CONTENT = 1 << 18;         // GATEWAY_MESSAGE_CONTENT
+const FLAG_CONTENT_LIMITED = 1 << 19; // GATEWAY_MESSAGE_CONTENT_LIMITED
+
 // Turn raw Discord/discord.js errors into something a bot owner can act on.
 function friendlyError(raw) {
   const m = String(raw || '');
-  if (/disallowed intents/i.test(m)) return 'Privileged intents are off. Discord Developer Portal > Bot: turn ON Server Members Intent (and Message Content Intent for AI chat), then Save.';
+  if (/disallowed intents/i.test(m)) return 'Privileged intents are off and could not be enabled automatically. Discord Developer Portal > Bot: turn ON Server Members Intent (and Message Content Intent for AI chat), then Save.';
   if (/invalid token|TokenInvalid/i.test(m)) return 'Invalid bot token. Reset the token in the Discord Developer Portal and save it here again.';
-  if (/used disallowed|not.*enabled/i.test(m)) return m;
   return m;
+}
+
+// "Used disallowed intents" means the Developer Portal toggles are off. The bot owner's own
+// token may edit the application's flags, so try to switch the needed intents on for them.
+// Returns true when Discord accepted a change (login is then retried).
+async function tryEnableIntents(row, hasAi) {
+  const mods = row.modules || [];
+  const needMembers = mods.some(m => ['welcome', 'invite', 'supporter'].includes(m));
+  const needContent = mods.includes('ai') && hasAi;
+  const headers = { Authorization: 'Bot ' + row.token, 'Content-Type': 'application/json' };
+  const api = 'https://discord.com/api/v10/applications/@me';
+  try {
+    const cur = await fetch(api, { headers });
+    if (!cur.ok) { console.error('[' + row.client_id + '] could not read application flags: HTTP ' + cur.status); return false; }
+    const app = await cur.json();
+    const flags = Number(app.flags || 0);
+    let want = flags;
+    if (needMembers && !(flags & (FLAG_MEMBERS | FLAG_MEMBERS_LIMITED))) want |= FLAG_MEMBERS;
+    if (needContent && !(flags & (FLAG_CONTENT | FLAG_CONTENT_LIMITED))) want |= FLAG_CONTENT;
+    if (want === flags) return false; // nothing to change, the problem is something else
+    const res = await fetch(api, { method: 'PATCH', headers, body: JSON.stringify({ flags: want }) });
+    if (!res.ok) { console.error('[' + row.client_id + '] enabling intents rejected by Discord: HTTP ' + res.status); return false; }
+    console.log('[' + row.client_id + '] privileged intents enabled automatically');
+    return true;
+  } catch (err) {
+    console.error('[' + row.client_id + '] enabling intents failed:', err.message);
+    return false;
+  }
 }
 
 // Checks that the IDs and permissions entered on the website really work in Discord.
@@ -120,7 +153,7 @@ async function runHosted() {
     }
   }
 
-  async function startBot(row) {
+  async function startBot(row, allowAutoFix = true) {
     const ai = await aiConfig(row);
     const config = { ...row.config, modules: row.modules, ai };
     const entry = { bot: null, row, updated_at: row.updated_at, hasAi: Boolean(ai), problem: null };
@@ -138,8 +171,13 @@ async function runHosted() {
     catch (err) {
       console.error('[' + row.client_id + '] login failed:', err.message);
       running.delete(row.id);
-      failed.set(row.id, { updated_at: row.updated_at, at: Date.now() });
       await entry.bot.stop();
+      // Privileged intents off in the Developer Portal: switch them on through the API and retry once.
+      if (allowAutoFix && /disallowed intents/i.test(err.message) && await tryEnableIntents(row, entry.hasAi)) {
+        await new Promise(r => setTimeout(r, 3000));
+        return startBot(row, false);
+      }
+      failed.set(row.id, { updated_at: row.updated_at, at: Date.now() });
       await db.rpc('set_hosted_bot_status', { p_id: row.id, p_status: 'error', p_error: friendlyError(err.message).slice(0, 300) });
     }
   }
