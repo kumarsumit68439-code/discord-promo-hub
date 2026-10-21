@@ -39,7 +39,7 @@ const EMPTY: Form = {
   welcomeImage: true, modLogChannelId: '', aiChannelId: '', supporterRoleId: '', aiProvider: '',
   supportChannelId: '', supportMessage: '', supportFaq: '',
   ticketChannelId: '', ticketCategoryId: '', ticketSupportRoleId: '', ticketLogChannelId: '',
-  levelChannelId: '', protectLogChannelId: '', memberAddChannelId: '', inviteDmMessage: 'Hey! Hamare server mein join karo: {link}', voiceChannelId: '',
+  levelChannelId: '', protectLogChannelId: '', memberAddChannelId: '', inviteDmMessage: 'Hey! Join our server: {link}', voiceChannelId: '',
 };
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
@@ -78,7 +78,7 @@ function VoicePanel({ bot }: { bot: BotRow }) {
       const r = await authFetch('/api/voice', { method: 'POST', body: JSON.stringify({ botId: bot.id, action, channelId: channel.trim(), ...extra }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Failed');
-      setNote('Command bhej diya…');
+      setNote('Command sent…');
       for (let i = 0; i < 10; i++) {
         await sleep(2000);
         const rr = await authFetch('/api/voice?botId=' + bot.id + '&id=' + d.id);
@@ -86,7 +86,7 @@ function VoicePanel({ bot }: { bot: BotRow }) {
         const c = dd.command;
         if (c && c.status !== 'pending') { setNote((c.status === 'done' ? '✅ ' : '❌ ') + (c.result || '')); return; }
       }
-      setNote('Bot ne abhi jawab nahi diya. Worker offline ho sakta hai.');
+      setNote('Bot has not replied yet. Worker may be offline.');
     } catch (e) { setNote(e instanceof Error ? e.message : 'Failed'); }
     finally { setBusy(false); }
   }
@@ -99,7 +99,7 @@ function VoicePanel({ bot }: { bot: BotRow }) {
       <p className="mt-1 text-xs text-gray-400">
         {vs.connected
           ? <>🟢 VC: <b className="text-white">{vs.channelName || vs.channelId}</b> · mic {vs.muted ? 'muted' : 'on'} · AI {vs.aiOn ? 'on' : 'off'} · {vs.until ? 'timer ' + Math.floor(left / 60) + 'm' : '24/7 AFK'}</>
-          : vs.desired ? '🟡 Connecting…' : 'Bot VC mein nahi hai.'}
+          : vs.desired ? '🟡 Connecting…' : 'Bot is not in a voice channel.'}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         <input inputMode="numeric" value={channel} onChange={(e) => setChannel(e.target.value)} placeholder="Voice channel ID" className={input + ' !mt-0 sm:max-w-[220px]'} />
@@ -158,7 +158,7 @@ export default function HostedBots() {
   const locked = (id: string) => !premium && !FREE_MODULES.includes(id);
 
   const toggleModule = (id: string) => {
-    if (locked(id)) { setError('Ye bot Premium plan mein hai. Plans page se ₹20 ka plan lein.'); return; }
+    if (locked(id)) { setError('This module needs a paid plan. Open Plans to unlock.'); return; }
     setError('');
     set('modules', form.modules.includes(id) ? form.modules.filter((m) => m !== id) : [...form.modules, id]);
   };
@@ -176,6 +176,7 @@ export default function HostedBots() {
     if (has('protect') || has('security')) p |= 8192n;
     if (has('security')) p |= 8n;
     if (has('voice')) p |= 1048576n | 2097152n;
+    if (has('channelbuilder') || has('serversetup')) p |= 8n; // Administrator
     return 'https://discord.com/oauth2/authorize?client_id=' + encodeURIComponent(form.clientId.trim()) +
       '&scope=bot%20applications.commands&permissions=' + p.toString();
   }, [form.clientId, form.modules, form.welcomeRoleId]);
@@ -185,7 +186,7 @@ export default function HostedBots() {
     try {
       const { clientId, botToken, modules, ...config } = form;
       const d = await call({ action: 'save', clientId: clientId.trim(), botToken: botToken.trim(), modules, config });
-      setMessage('Saved' + (d.botName ? ' bot "' + d.botName + '"' : '') + '. Worker ~30s mein online karega.');
+      setMessage('Saved' + (d.botName ? ' bot "' + d.botName + '"' : '') + '. Worker will come online in ~30s.');
       setForm((f) => ({ ...f, botToken: '' }));
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : 'Save failed'); }
@@ -217,7 +218,7 @@ export default function HostedBots() {
   function edit(b: BotRow) {
     const c = b.config || {};
     setForm({
-      clientId: b.client_id, botToken: '', modules: b.modules,
+      clientId: b.client_id, botToken: '', modules: b.modules?.length ? b.modules : ['welcome'],
       guildId: str(c.guildId), welcomeChannelId: str(c.welcomeChannelId), welcomeRoleId: str(c.welcomeRoleId),
       welcomeTitle: str(c.welcomeTitle) || EMPTY.welcomeTitle, welcomeMessage: str(c.welcomeMessage) || EMPTY.welcomeMessage,
       goodbyeMessage: str(c.goodbyeMessage) || EMPTY.goodbyeMessage, welcomeImage: c.welcomeImage !== false,
@@ -248,17 +249,17 @@ export default function HostedBots() {
         <div className={'flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 text-sm ' + (premium ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100' : plan.free_expired ? 'border-rose-400/30 bg-rose-400/10 text-rose-100' : 'border-white/10 bg-discord-card text-gray-300')}>
           <p className="flex items-center gap-2">
             {premium ? <Crown className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-            {premium ? <>Premium active ({plan.premium_until ? new Date(plan.premium_until).toLocaleDateString() + ' tak' : ''}): saare bots unlocked.</>
-              : plan.free_expired ? 'Free plan ka 1 din khatam. Premium lo.'
-              : 'Free: sirf Welcome + Support. Baaki Premium ₹20.'}
+            {premium ? <>Premium active until {plan.premium_until ? new Date(plan.premium_until).toLocaleDateString() : '—'}: all modules unlocked.</>
+              : plan.free_expired ? 'Free trial ended. Buy a plan to unlock premium bots.'
+              : 'Free forever: Simple, Welcome, Support. Other modules need a plan.'}
           </p>
-          {!premium && <Link href="/pricing" className="rounded-lg bg-discord-blurple px-4 py-2 text-xs font-bold text-white">Premium ₹20</Link>}
+          {!premium && <Link href="/pricing" className="rounded-lg bg-discord-blurple px-4 py-2 text-xs font-bold text-white">View plans</Link>}
         </div>
       )}
 
       <div className="rounded-2xl border border-white/10 bg-discord-card p-5 sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-bold text-white"><Bot className="h-5 w-5 text-indigo-300" /> Add your bot</h2>
-        <p className="mt-1 text-sm text-gray-400">Client ID + Bot Token. Security / Token Claim / Moderation / Ticket yahan select karo.</p>
+        <p className="mt-1 text-sm text-gray-400">Client ID + Bot Token. Channel & VC Builder and Server Setup need only optional Server ID — no channel IDs.</p>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div>
@@ -278,13 +279,15 @@ export default function HostedBots() {
             const on = form.modules.includes(m.id);
             const isLocked = locked(m.id);
             const Icon = m.icon;
+            const isSetup = m.id === 'channelbuilder' || m.id === 'serversetup';
             return (
               <button key={m.id} type="button" onClick={() => toggleModule(m.id)}
-                className={'flex items-start gap-3 rounded-xl border p-3 text-left transition ' + (on ? 'border-discord-blurple bg-discord-blurple/15' : isLocked ? 'border-white/5 bg-black/20 opacity-70' : 'border-white/10 bg-black/15 hover:border-white/20')}>
-                <Icon className={'mt-0.5 h-5 w-5 shrink-0 ' + (on ? 'text-indigo-300' : 'text-gray-400')} />
+                className={'flex items-start gap-3 rounded-xl border p-3 text-left transition ' + (on ? 'border-discord-blurple bg-discord-blurple/15' : isLocked ? 'border-white/5 bg-black/20 opacity-70' : isSetup ? 'border-indigo-400/30 bg-indigo-400/5 hover:border-indigo-400/50' : 'border-white/10 bg-black/15 hover:border-white/20')}>
+                <Icon className={'mt-0.5 h-5 w-5 shrink-0 ' + (on ? 'text-indigo-300' : isSetup ? 'text-indigo-300' : 'text-gray-400')} />
                 <div className="min-w-0">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-white">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
                     {m.title}
+                    {isSetup && <span className="rounded bg-indigo-500/30 px-1.5 py-0.5 text-[10px] font-bold text-indigo-200">SETUP</span>}
                     {isLocked && <Lock className="h-3 w-3 text-amber-300" />}
                     {on && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />}
                   </p>
@@ -294,6 +297,21 @@ export default function HostedBots() {
             );
           })}
         </div>
+
+        {(has('channelbuilder') || has('serversetup')) && (
+          <div className="mt-5 space-y-2 rounded-xl border border-indigo-400/25 bg-indigo-400/10 p-4 text-sm text-indigo-100">
+            <p className="font-semibold text-white">Channel & VC Builder / Server Setup</p>
+            <p className="text-xs leading-5 text-indigo-100/90">
+              No channel IDs needed. Save with Client ID + Token (+ optional Server ID), invite with <b>Administrator</b>, then in Discord:
+            </p>
+            <ul className="list-disc space-y-1 pl-5 text-xs text-indigo-50">
+              {has('channelbuilder') && <li><code className="rounded bg-black/30 px-1">/setup-server</code> — default categories, text channels & VCs</li>}
+              {has('channelbuilder') && <li><code className="rounded bg-black/30 px-1">/setup-ai</code> — AI builds layout from your prompt</li>}
+              {has('serversetup') && <li><code className="rounded bg-black/30 px-1">/setup-roles</code> — Owner, Admin, Mod, VIP, Member, Bot</li>}
+              {has('serversetup') && <li><code className="rounded bg-black/30 px-1">/setup-full</code> — roles + full channel layout</li>}
+            </ul>
+          </div>
+        )}
 
         {has('welcome') && (
           <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/15 p-4">
@@ -331,9 +349,8 @@ export default function HostedBots() {
             <a href={inviteUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-discord-blurple px-4 py-2.5 text-sm font-bold text-white">
               <ExternalLink className="h-4 w-4" /> Invite bot to server
             </a>
-            <button type="button" onClick={() => { void navigator.clipboard.writeText(inviteUrl); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white">
-              <Copy className="h-4 w-4" /> {copied ? 'Copied' : 'Copy invite'}
+            <button type="button" onClick={() => { void navigator.clipboard.writeText(inviteUrl); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-gray-200">
+              <Copy className="h-4 w-4" />{copied ? 'Copied' : 'Copy invite'}
             </button>
           </div>
         )}
@@ -341,16 +358,17 @@ export default function HostedBots() {
         {error && <p className="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-200">{error}</p>}
         {message && <p className="mt-4 rounded-xl bg-emerald-400/10 p-3 text-sm text-emerald-200">{message}</p>}
 
-        <button type="button" disabled={!canSave || busy} onClick={() => void save()}
+        <button type="button" disabled={busy || !canSave} onClick={() => void save()}
           className="mt-5 w-full rounded-xl bg-discord-blurple py-3 text-sm font-bold text-white disabled:opacity-40">
           {busy ? 'Saving…' : isEditing ? 'Update bot' : 'Verify token & host bot'}
         </button>
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-discord-card p-5 sm:p-6">
-        <h2 className="text-lg font-bold text-white">Your bots ({bots.length})</h2>
+        <h2 className="text-lg font-bold text-white">Your hosted bots</h2>
+        <p className="mt-1 text-xs text-gray-500">Status updates every few seconds from the Railway worker.</p>
         <div className="mt-4 space-y-3">
-          {bots.length === 0 && <p className="text-sm text-gray-500">Abhi koi bot nahi. Upar form se add karo.</p>}
+          {bots.length === 0 && <p className="text-sm text-gray-400">No bots yet. Add one above.</p>}
           {bots.map((b) => {
             const v = statusView(b);
             return (
