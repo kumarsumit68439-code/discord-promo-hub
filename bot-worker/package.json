@@ -1,6 +1,6 @@
 {
   "name": "discord-promo-hub-worker",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "description": "Persistent Discord Gateway worker for Promo Hub hosted bots",
   "main": "src/index.js",
@@ -17,6 +17,7 @@
     "discord.js": "^14.19.3",
     "libsodium-wrappers": "^0.7.15",
     "opusscript": "^0.0.8",
-    "play-dl": "^1.9.7"
+    "play-dl": "^1.9.7",
+    "ws": "^8.18.0"
   }
 }
