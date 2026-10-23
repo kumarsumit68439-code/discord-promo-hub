@@ -1,15 +1,17 @@
 /**
  * Music control for hosted bots:
  * - Website queues music_play → worker sends interactive mini-player embed
- * - Buttons (play / pause / skip / stop) work via Discord component interactions
- * - Optional real audio via play-dl + @discordjs/voice when a voice channel is known
+ * - Buttons (play / pause / resume / skip / stop) work via Discord component interactions
+ * - Real audio via play-dl + @discordjs/voice:
+ *     * auto-plays in the configured voice channel when the website sends a track
+ *     * the Play button plays the track in the voice channel the clicker is in
+ * - Optional YOUTUBE_COOKIE env var (helps with "Sign in to confirm you're not a bot")
  */
 const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ComponentType,
 } = require('discord.js');
 const {
   joinVoiceChannel,
@@ -28,8 +30,20 @@ try {
   playdl = null;
 }
 
+if (playdl && process.env.YOUTUBE_COOKIE) {
+  try {
+    playdl.setToken({ youtube: { cookie: process.env.YOUTUBE_COOKIE } });
+  } catch (e) {
+    console.warn('[music] could not set YOUTUBE_COOKIE:', e.message);
+  }
+}
+
+const EPHEMERAL = 64;
+
 /** guildId -> { player, connection, queue, current, textChannelId } */
 const sessions = new Map();
+/** guildId -> configured voice channel id (fallback for the Play button) */
+const voiceHint = new Map();
 
 function ytUrl(idOrUrl) {
   const s = String(idOrUrl || '');
@@ -48,18 +62,23 @@ function videoIdFrom(url) {
   }
 }
 
+// Max 5 buttons per row: Play, Pause, Resume, Skip, Stop
 function playerRow(videoId, paused) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('mph:resume:' + videoId)
-      .setLabel('Resume')
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(!paused),
+      .setCustomId('mph:play:' + videoId)
+      .setLabel('▶ Play')
+      .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId('mph:pause:' + videoId)
       .setLabel('Pause')
       .setStyle(ButtonStyle.Primary)
       .setDisabled(!!paused),
+    new ButtonBuilder()
+      .setCustomId('mph:resume:' + videoId)
+      .setLabel('Resume')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!paused),
     new ButtonBuilder()
       .setCustomId('mph:skip:' + videoId)
       .setLabel('Skip')
@@ -71,7 +90,7 @@ function playerRow(videoId, paused) {
   );
 }
 
-// FIX: Discord Link buttons must NOT have a custom id (URL and custom id are mutually exclusive).
+// Discord Link buttons must NOT have a custom id (URL and custom id are mutually exclusive).
 function searchRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -92,9 +111,42 @@ function buildEmbed({ title, channel, thumbnail, url, by, status }) {
   return e;
 }
 
+function destroySession(guildId) {
+  const s = sessions.get(guildId);
+  if (s) {
+    s.queue = [];
+    s.current = null;
+    try {
+      s.player.stop(true);
+    } catch {
+      /* */
+    }
+    try {
+      s.connection.destroy();
+    } catch {
+      /* */
+    }
+    sessions.delete(guildId);
+  }
+  const conn = getVoiceConnection(guildId);
+  if (conn) {
+    try {
+      conn.destroy();
+    } catch {
+      /* */
+    }
+  }
+}
+
 async function ensureSession(guild, voiceChannelId) {
   let s = sessions.get(guild.id);
-  if (s && s.connection) return s;
+  if (s && s.connection) {
+    const status = s.connection.state && s.connection.state.status;
+    const sameChannel = s.connection.joinConfig && s.connection.joinConfig.channelId === String(voiceChannelId);
+    if (status !== VoiceConnectionStatus.Destroyed && sameChannel) return s;
+    destroySession(guild.id);
+    s = null;
+  }
 
   const channel = await guild.channels.fetch(voiceChannelId).catch(() => null);
   if (!channel || channel.type !== 2) {
@@ -181,14 +233,15 @@ async function sendMiniPlayer(client, row, payload, channelId) {
 
   const embed = buildEmbed({ title, channel: channelName, thumbnail, url, by, status: 'playing' });
   const msg = await ch.send({
-    content: '🎧 **Mini player** · control from Discord buttons or the website',
+    content: '🎧 **Mini player** · press ▶ Play (join a voice channel first) or control from the website',
     embeds: [embed],
     components: [playerRow(videoId, false), searchRow()],
   });
 
   // Real audio if we have a voice channel
   const voiceId = cfg.voiceChannelId || cfg.musicVoiceChannelId || payload.voiceChannelId;
-  let audioResult = 'Embed sent (no VC configured — set Voice channel ID on the bot for real audio)';
+  if (voiceId && ch.guild) voiceHint.set(ch.guild.id, String(voiceId));
+  let audioResult = 'Embed sent (no VC configured — press ▶ Play in a voice channel, or set Voice channel ID on the bot)';
   if (voiceId && playdl && ch.guild) {
     try {
       const s = await ensureSession(ch.guild, String(voiceId));
@@ -218,13 +271,48 @@ async function handleButton(interaction) {
   const videoId = parts[2] || '';
   const guild = interaction.guild;
   if (!guild) {
-    await interaction.reply({ content: 'Guild only', ephemeral: true });
+    await interaction.reply({ content: 'Guild only', flags: EPHEMERAL });
     return true;
   }
 
   const s = sessions.get(guild.id);
 
   try {
+    if (action === 'play') {
+      await interaction.deferReply({ flags: EPHEMERAL });
+      if (!videoId || videoId === 'unknown') {
+        await interaction.editReply('❌ Is track ka video ID nahi mila.');
+        return true;
+      }
+      const vcId = (interaction.member && interaction.member.voice && interaction.member.voice.channelId) || voiceHint.get(guild.id);
+      if (!vcId) {
+        await interaction.editReply('🔊 Pehle kisi voice channel me join karo, phir ▶ Play dabao.');
+        return true;
+      }
+      const emb = interaction.message && interaction.message.embeds && interaction.message.embeds[0];
+      const descLines = String((emb && emb.description) || '').split('\n');
+      const track = {
+        id: videoId,
+        url: ytUrl(videoId),
+        title: (descLines[0] || '').replace(/\*\*/g, '').trim(),
+        channel: descLines[1] || '',
+        thumbnail: (emb && emb.thumbnail && emb.thumbnail.url) || '',
+        messageId: interaction.message && interaction.message.id,
+      };
+      try {
+        const sess = await ensureSession(guild, String(vcId));
+        if (sess.current) {
+          sess.queue.push(track);
+          await interaction.editReply('➕ Queue me add hua (' + sess.queue.length + ' aage).');
+        } else {
+          await playTrack(guild, track);
+          await interaction.editReply('▶️ Voice channel me play ho raha hai.');
+        }
+      } catch (e) {
+        await interaction.editReply('❌ Play nahi ho paya: ' + (e.message || e));
+      }
+      return true;
+    }
     if (action === 'pause') {
       if (s?.player) s.player.pause();
       await interaction.update({
@@ -259,27 +347,11 @@ async function handleButton(interaction) {
     }
     if (action === 'skip') {
       if (s?.player) s.player.stop(true);
-      await interaction.reply({ content: '⏭️ Skip', ephemeral: true });
+      await interaction.reply({ content: '⏭️ Skip', flags: EPHEMERAL });
       return true;
     }
     if (action === 'stop') {
-      if (s) {
-        s.queue = [];
-        s.current = null;
-        try {
-          s.player.stop(true);
-        } catch {
-          /* */
-        }
-        try {
-          s.connection.destroy();
-        } catch {
-          /* */
-        }
-        sessions.delete(guild.id);
-      }
-      const conn = getVoiceConnection(guild.id);
-      if (conn) conn.destroy();
+      destroySession(guild.id);
       await interaction.update({
         content: '⏹️ Stopped',
         embeds: [],
@@ -289,7 +361,7 @@ async function handleButton(interaction) {
     }
   } catch (e) {
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: 'Error: ' + (e.message || e), ephemeral: true }).catch(() => null);
+      await interaction.reply({ content: 'Error: ' + (e.message || e), flags: EPHEMERAL }).catch(() => null);
     }
   }
   return true;
