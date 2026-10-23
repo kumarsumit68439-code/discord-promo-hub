@@ -1,6 +1,6 @@
 {
   "name": "discord-promo-hub-worker",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "private": true,
   "description": "Persistent Discord Gateway worker for Promo Hub hosted bots",
   "main": "src/index.js",
@@ -8,11 +8,12 @@
     "start": "node src/index.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "dependencies": {
-    "@discordjs/voice": "^0.18.0",
+    "@discordjs/voice": "^0.19.2",
     "@napi-rs/canvas": "^0.1.65",
+    "@snazzah/davey": "^0.1.6",
     "@supabase/supabase-js": "^2.49.0",
     "discord.js": "^14.19.3",
     "libsodium-wrappers": "^0.7.15",
