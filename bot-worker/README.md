@@ -20,8 +20,9 @@ Vercel alone cannot keep a Discord bot online. This worker must run on Railway (
 4. Variables:
    - `SUPABASE_URL` = `https://nimduknedcjsmimaszvu.supabase.co`
    - `SUPABASE_SERVICE_ROLE_KEY` = from Supabase Dashboard → Settings → API → `service_role` (secret)
+   - `GROQ_API_KEY` = from https://console.groq.com/keys (needed for `/setup-ai`; optional if users save their own Groq key on the website)
 5. Restart policy: **Always**
-6. Disable sleep / serverless mode
+6. Disable sleep / serverless mode (so bots stay online 24/7)
 
 After deploy, open site → **Bots** tab → save a bot token. Worker syncs every 30s and sets status to `online`.
 
