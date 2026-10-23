@@ -8,11 +8,14 @@
 const { ChannelType, PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+// Current Groq production chat models (Oct 2026). Avoid deprecated ids (gemma2, mixtral, etc.)
+// Llama 3.x may return 400 on free Developer plan if marked Enterprise — try gpt-oss first.
 const GROQ_MODELS = [
-  'llama-3.3-70b-versatile',
+  'openai/gpt-oss-20b',
+  'openai/gpt-oss-120b',
   'llama-3.1-8b-instant',
-  'gemma2-9b-it',
-  'mixtral-8x7b-32768',
+  'llama-3.3-70b-versatile',
+  'qwen/qwen3.8-27b',
 ];
 
 /** Default template matching common gaming community layout (like MC GANG screenshots). */
@@ -168,7 +171,10 @@ async function groqLayout(prompt, row) {
 Rules: max 6 categories, max 12 channels per category, names under 100 chars, realistic gaming/community servers.`;
 
   let lastErr = '';
-  const models = preferredModel
+  const skipPreferred =
+    preferredModel &&
+    /whisper|tts|orpheus|guard|safeguard|prompt-guard/i.test(preferredModel);
+  const models = preferredModel && !skipPreferred
     ? [preferredModel, ...GROQ_MODELS.filter((m) => m !== preferredModel)]
     : GROQ_MODELS;
   for (const model of models) {
@@ -190,7 +196,14 @@ Rules: max 6 categories, max 12 channels per category, names under 100 chars, re
         }),
       });
       if (!res.ok) {
-        lastErr = 'HTTP ' + res.status;
+        let detail = '';
+        try {
+          const errBody = await res.json();
+          detail = errBody?.error?.message || errBody?.message || JSON.stringify(errBody).slice(0, 120);
+        } catch (_) {
+          detail = (await res.text().catch(() => '')).slice(0, 120);
+        }
+        lastErr = model + ' → HTTP ' + res.status + (detail ? ': ' + detail : '');
         continue;
       }
       const data = await res.json();
@@ -200,10 +213,14 @@ Rules: max 6 categories, max 12 channels per category, names under 100 chars, re
       if (!parsed.categories && !parsed.topChannels) throw new Error('bad shape');
       return parsed;
     } catch (e) {
-      lastErr = e.message;
+      lastErr = (model || '') + ': ' + (e.message || String(e));
     }
   }
-  throw new Error('AI layout failed: ' + lastErr);
+  throw new Error(
+    'AI layout failed: ' +
+      lastErr +
+      ' — Free plan pe openai/gpt-oss-20b try hota hai. Website AI settings me chat model set karo, ya Railway GROQ_MODEL=openai/gpt-oss-20b.'
+  );
 }
 
 function resolveGuild(client, config, interaction) {

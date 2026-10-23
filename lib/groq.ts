@@ -30,8 +30,8 @@ export function pickChatModel(models: GroqModel[]): string {
   const chat = models.filter((m) => m.kind === 'chat').map((m) => m.id);
   const env = process.env.GROQ_MODEL;
   if (env && (chat.length === 0 || chat.includes(env))) return env;
-  for (const c of ['llama-3.3-70b-versatile', 'openai/gpt-oss-20b', 'llama-3.1-8b-instant']) if (chat.includes(c)) return c;
-  return chat[0] || 'llama-3.3-70b-versatile';
+  for (const c of ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'qwen/qwen3.8-27b']) if (chat.includes(c)) return c;
+  return chat[0] || 'openai/gpt-oss-20b';
 }
 
 export async function groqComplete(opts: {
