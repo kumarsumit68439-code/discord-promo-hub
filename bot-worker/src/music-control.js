@@ -2,10 +2,11 @@
  * Music control for hosted bots:
  * - Website queues music_play → worker sends interactive mini-player embed
  * - Buttons (play / pause / resume / skip / stop) work via Discord component interactions
- * - Real audio via play-dl + @discordjs/voice:
+ * - Real audio via @discordjs/voice:
+ *     * direct MP3 / radio stream URLs (any non-YouTube http(s) link) via ffmpeg — no YouTube block
+ *     * YouTube via play-dl (may be blocked on cloud IPs), SoundCloud fallback
  *     * auto-plays in the configured voice channel when the website sends a track
  *     * the Play button plays the track in the voice channel the clicker is in
- * - If YouTube blocks the server ("Sign in to confirm you're not a bot"), falls back to SoundCloud
  * - Optional YOUTUBE_COOKIE env var
  */
 const {
@@ -20,6 +21,7 @@ const {
   createAudioResource,
   AudioPlayerStatus,
   VoiceConnectionStatus,
+  StreamType,
   entersState,
   getVoiceConnection,
 } = require('@discordjs/voice');
@@ -48,9 +50,35 @@ const voiceHint = new Map();
 
 let soundcloudReady = false;
 
+function isHttp(s) {
+  return /^https?:\/\//i.test(String(s || ''));
+}
+
+/** Any http(s) link that is not YouTube / SoundCloud is treated as a direct audio stream (mp3, radio, ...). */
+function isDirectAudio(url) {
+  if (!isHttp(url)) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (/(^|\.)youtube\.com$|(^|\.)youtu\.be$|(^|\.)youtube-nocookie\.com$|(^|\.)soundcloud\.com$/.test(host)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function titleFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const last = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || u.hostname);
+    return last.replace(/\.(mp3|m4a|aac|ogg|opus|wav|flac|m3u8?)$/i, '').replace(/[_-]+/g, ' ').slice(0, 120) || u.hostname;
+  } catch {
+    return 'Audio';
+  }
+}
+
 function ytUrl(idOrUrl) {
   const s = String(idOrUrl || '');
-  if (/^https?:\/\//i.test(s)) return s;
+  if (isHttp(s)) return s;
   if (/^[\w-]{11}$/.test(s)) return 'https://www.youtube.com/watch?v=' + s;
   return s;
 }
@@ -108,9 +136,9 @@ function buildEmbed({ title, channel, thumbnail, url, by, status }) {
     .setColor(status === 'paused' ? 0xf59e0b : 0xa855f7)
     .setTitle(status === 'paused' ? '⏸️ Paused' : '🎵 Now playing')
     .setDescription('**' + (title || 'Track') + '**' + (channel ? '\n' + channel : ''))
-    .setURL(url || null)
     .setFooter({ text: by ? 'Requested from Promo Hub · ' + by : 'Promo Hub music control' });
-  if (thumbnail) e.setThumbnail(thumbnail);
+  if (isHttp(url)) e.setURL(url);
+  if (isHttp(thumbnail)) e.setThumbnail(thumbnail);
   return e;
 }
 
@@ -166,7 +194,11 @@ async function ensureSession(guild, voiceChannelId) {
   try {
     await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
   } catch (e) {
-    connection.destroy();
+    try {
+      connection.destroy();
+    } catch {
+      /* already destroyed */
+    }
     throw new Error('Could not join voice: ' + (e.message || e));
   }
 
@@ -214,11 +246,21 @@ async function soundcloudFallback(track) {
 }
 
 async function playTrack(guild, track) {
-  if (!playdl) throw new Error('play-dl not available');
   const s = sessions.get(guild.id);
   if (!s) throw new Error('No voice session');
 
   const url = ytUrl(track.url || track.id);
+
+  // Direct MP3 / radio stream: ffmpeg handles it, no YouTube involved.
+  if (isDirectAudio(url)) {
+    const resource = createAudioResource(url, { inputType: StreamType.Arbitrary });
+    s.current = { ...track, url };
+    s.player.play(resource);
+    return 'Playing (direct audio)';
+  }
+
+  if (!playdl) throw new Error('play-dl not available');
+
   let streamInfo = null;
   let firstErr = null;
   let source = 'YouTube';
@@ -258,11 +300,12 @@ async function sendMiniPlayer(client, row, payload, channelId) {
   const textId = channelId || cfg.musicChannelId;
   if (!textId) throw new Error('Music channel ID missing');
 
-  const title = String(payload.title || 'Track').slice(0, 200);
-  const channelName = String(payload.channel || '').slice(0, 100);
-  const thumbnail = String(payload.thumbnail || '');
   const url = ytUrl(payload.url || payload.query || '');
-  const videoId = videoIdFrom(url) || 'unknown';
+  const direct = isDirectAudio(url);
+  const title = String(payload.title || (direct ? titleFromUrl(url) : 'Track')).slice(0, 200);
+  const channelName = String(payload.channel || (direct ? 'Direct audio' : '')).slice(0, 100);
+  const thumbnail = String(payload.thumbnail || '');
+  const videoId = (direct ? '' : videoIdFrom(url)) || 'unknown';
   const by = String(payload.by || 'website');
 
   const ch = await client.channels.fetch(textId).catch(() => null);
@@ -279,15 +322,16 @@ async function sendMiniPlayer(client, row, payload, channelId) {
   const voiceId = cfg.voiceChannelId || cfg.musicVoiceChannelId || payload.voiceChannelId;
   if (voiceId && ch.guild) voiceHint.set(ch.guild.id, String(voiceId));
   let audioResult = 'Embed sent (no VC configured — press ▶ Play in a voice channel, or set Voice channel ID on the bot)';
-  if (voiceId && playdl && ch.guild) {
+  if (voiceId && ch.guild && (direct || playdl)) {
     try {
       const s = await ensureSession(ch.guild, String(voiceId));
       s.textChannelId = textId;
+      const track = { id: videoId, url, title, channel: channelName, thumbnail, messageId: msg.id };
       if (s.current) {
-        s.queue.push({ id: videoId, url, title, channel: channelName, thumbnail, messageId: msg.id });
+        s.queue.push(track);
         audioResult = 'Queued in VC (' + s.queue.length + ' ahead)';
       } else {
-        const r = await playTrack(ch.guild, { id: videoId, url, title, channel: channelName, thumbnail, messageId: msg.id });
+        const r = await playTrack(ch.guild, track);
         audioResult = r + ' in voice channel';
       }
     } catch (e) {
@@ -317,8 +361,11 @@ async function handleButton(interaction) {
   try {
     if (action === 'play') {
       await interaction.deferReply({ flags: EPHEMERAL });
-      if (!videoId || videoId === 'unknown') {
-        await interaction.editReply('❌ Is track ka video ID nahi mila.');
+      const emb = interaction.message && interaction.message.embeds && interaction.message.embeds[0];
+      // YouTube tracks carry the video id; direct audio tracks keep their link in the embed URL.
+      const trackUrl = videoId && videoId !== 'unknown' ? ytUrl(videoId) : emb && emb.url;
+      if (!trackUrl) {
+        await interaction.editReply('❌ Is track ka link nahi mila.');
         return true;
       }
       const vcId = (interaction.member && interaction.member.voice && interaction.member.voice.channelId) || voiceHint.get(guild.id);
@@ -326,11 +373,10 @@ async function handleButton(interaction) {
         await interaction.editReply('🔊 Pehle kisi voice channel me join karo, phir ▶ Play dabao.');
         return true;
       }
-      const emb = interaction.message && interaction.message.embeds && interaction.message.embeds[0];
       const descLines = String((emb && emb.description) || '').split('\n');
       const track = {
-        id: videoId,
-        url: ytUrl(videoId),
+        id: videoId || 'unknown',
+        url: trackUrl,
         title: (descLines[0] || '').replace(/\*\*/g, '').trim(),
         channel: descLines[1] || '',
         thumbnail: (emb && emb.thumbnail && emb.thumbnail.url) || '',
