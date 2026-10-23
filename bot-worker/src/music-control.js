@@ -71,13 +71,13 @@ function playerRow(videoId, paused) {
   );
 }
 
+// FIX: Discord Link buttons must NOT have a custom id (URL and custom id are mutually exclusive).
 function searchRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('mph:search')
       .setLabel('Search on website')
       .setStyle(ButtonStyle.Link)
-      .setURL('https://discord-promo-hub-io-cr-7-c3d3.vercel.app/hosting')
+      .setURL('https://discord-promo-hub.vercel.app/hosting')
   );
 }
 
