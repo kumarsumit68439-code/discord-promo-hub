@@ -7,7 +7,7 @@
  *     * YouTube via play-dl (may be blocked on cloud IPs), SoundCloud fallback
  *     * auto-plays in the configured voice channel when the website sends a track
  *     * the Play button plays the track in the voice channel the clicker is in
- * - Optional YOUTUBE_COOKIE env var
+ * - Optional YOUTUBE_COOKIE env var (header string, "name=value; name2=value2", or Cookie-Editor JSON)
  */
 const {
   EmbedBuilder,
@@ -33,9 +33,42 @@ try {
   playdl = null;
 }
 
-if (playdl && process.env.YOUTUBE_COOKIE) {
+/** Normalise whatever was pasted into YOUTUBE_COOKIE into a clean "name=value; name2=value2" header string. */
+function cleanCookie(raw) {
+  let c = String(raw || '').trim();
+  if (!c) return '';
+  if (c.startsWith('[')) {
+    // Cookie-Editor "JSON" export
+    try {
+      const arr = JSON.parse(c);
+      if (Array.isArray(arr)) {
+        c = arr
+          .filter((x) => x && x.name && x.value !== undefined && x.value !== null)
+          .map((x) => x.name + '=' + x.value)
+          .join('; ');
+      }
+    } catch {
+      /* keep as is */
+    }
+  }
+  c = c
+    .replace(/^cookie\s*:\s*/i, '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .trim()
+    .replace(/;+\s*$/, '');
+  return c;
+}
+
+const ytCookie = cleanCookie(process.env.YOUTUBE_COOKIE);
+if (playdl && ytCookie) {
   try {
-    playdl.setToken({ youtube: { cookie: process.env.YOUTUBE_COOKIE } });
+    playdl.setToken({ youtube: { cookie: ytCookie } });
+    const names = ytCookie
+      .split(';')
+      .map((p) => p.split('=')[0].trim())
+      .filter(Boolean);
+    console.log('[music] YOUTUBE_COOKIE loaded: ' + names.length + ' cookies (' + names.join(', ') + ')');
   } catch (e) {
     console.warn('[music] could not set YOUTUBE_COOKIE:', e.message);
   }
@@ -269,6 +302,7 @@ async function playTrack(guild, track) {
     streamInfo = await playdl.stream(url, { discordPlayerCompatibility: true });
   } catch (e) {
     firstErr = e;
+    console.warn('[music] youtube stream failed:', e && e.message ? e.message : e);
     if (track.title) {
       try {
         const found = await playdl.search(track.title, { limit: 1 });
