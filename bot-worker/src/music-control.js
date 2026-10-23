@@ -3,12 +3,16 @@
  * - Website queues music_play → worker sends interactive mini-player embed
  * - Buttons (play / pause / resume / skip / stop) work via Discord component interactions
  * - Real audio via @discordjs/voice:
- *     * direct MP3 / radio stream URLs (any non-YouTube http(s) link) via ffmpeg — no YouTube block
- *     * YouTube via play-dl (may be blocked on cloud IPs), SoundCloud fallback
+ *     * YouTube: yt-dlp first (standalone binary, node as JS runtime), then play-dl, then SoundCloud
+ *     * direct MP3 / radio stream URLs (any non-YouTube http(s) link) via ffmpeg
  *     * auto-plays in the configured voice channel when the website sends a track
  *     * the Play button plays the track in the voice channel the clicker is in
  * - Optional YOUTUBE_COOKIE env var (header string, "name=value; name2=value2", or Cookie-Editor JSON)
  */
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawn } = require('child_process');
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -60,23 +64,56 @@ function cleanCookie(raw) {
   return c;
 }
 
-const ytCookie = cleanCookie(process.env.YOUTUBE_COOKIE);
-if (playdl && ytCookie) {
+/** yt-dlp needs a Netscape cookie file; build one from the header string. */
+function writeCookieFile(cookie) {
   try {
-    playdl.setToken({ youtube: { cookie: ytCookie } });
-    const names = ytCookie
-      .split(';')
-      .map((p) => p.split('=')[0].trim())
-      .filter(Boolean);
-    console.log('[music] YOUTUBE_COOKIE loaded: ' + names.length + ' cookies (' + names.join(', ') + ')');
+    const lines = ['# Netscape HTTP Cookie File'];
+    for (const part of cookie.split(';')) {
+      const i = part.indexOf('=');
+      if (i < 1) continue;
+      const name = part.slice(0, i).trim();
+      const value = part.slice(i + 1).trim();
+      if (!name) continue;
+      lines.push(['.youtube.com', 'TRUE', '/', 'TRUE', '2147483647', name, value].join('\t'));
+    }
+    const file = path.join(os.tmpdir(), 'yt-cookies.txt');
+    fs.writeFileSync(file, lines.join('\n') + '\n', { mode: 0o600 });
+    return file;
   } catch (e) {
-    console.warn('[music] could not set YOUTUBE_COOKIE:', e.message);
+    console.warn('[music] could not write cookie file:', e.message);
+    return null;
   }
+}
+
+const ytCookie = cleanCookie(process.env.YOUTUBE_COOKIE);
+let ytCookieFile = null;
+if (ytCookie) {
+  const names = ytCookie
+    .split(';')
+    .map((p) => p.split('=')[0].trim())
+    .filter(Boolean);
+  console.log('[music] YOUTUBE_COOKIE loaded: ' + names.length + ' cookies (' + names.join(', ') + ')');
+  ytCookieFile = writeCookieFile(ytCookie);
+  if (playdl) {
+    try {
+      playdl.setToken({ youtube: { cookie: ytCookie } });
+    } catch (e) {
+      console.warn('[music] could not set play-dl cookie:', e.message);
+    }
+  }
+}
+
+// Keep yt-dlp fresh (YouTube changes often). Fire and forget.
+try {
+  const upd = spawn('yt-dlp', ['-U'], { stdio: 'ignore' });
+  upd.on('error', () => {});
+} catch {
+  /* yt-dlp not installed */
 }
 
 const EPHEMERAL = 64;
 
-/** guildId -> { player, connection, queue, current, textChannelId } */
+/** guildId -> { player, connection, queue, current, textChannelId, ytproc } */
 const sessions = new Map();
 /** guildId -> configured voice channel id (fallback for the Play button) */
 const voiceHint = new Map();
@@ -85,6 +122,15 @@ let soundcloudReady = false;
 
 function isHttp(s) {
   return /^https?:\/\//i.test(String(s || ''));
+}
+
+function isYouTube(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return /(^|\.)youtube\.com$|(^|\.)youtu\.be$|(^|\.)youtube-nocookie\.com$/.test(host);
+  } catch {
+    return false;
+  }
 }
 
 /** Any http(s) link that is not YouTube / SoundCloud is treated as a direct audio stream (mp3, radio, ...). */
@@ -175,11 +221,23 @@ function buildEmbed({ title, channel, thumbnail, url, by, status }) {
   return e;
 }
 
+function killYtdlp(s) {
+  if (s && s.ytproc) {
+    try {
+      s.ytproc.kill('SIGKILL');
+    } catch {
+      /* */
+    }
+    s.ytproc = null;
+  }
+}
+
 function destroySession(guildId) {
   const s = sessions.get(guildId);
   if (s) {
     s.queue = [];
     s.current = null;
+    killYtdlp(s);
     try {
       s.player.stop(true);
     } catch {
@@ -238,10 +296,11 @@ async function ensureSession(guild, voiceChannelId) {
   const player = createAudioPlayer();
   connection.subscribe(player);
 
-  s = { player, connection, queue: [], current: null, textChannelId: null };
+  s = { player, connection, queue: [], current: null, textChannelId: null, ytproc: null };
   sessions.set(guild.id, s);
 
   player.on(AudioPlayerStatus.Idle, () => {
+    killYtdlp(s);
     const next = s.queue.shift();
     if (next) {
       void playTrack(guild, next).catch(() => null);
@@ -255,6 +314,67 @@ async function ensureSession(guild, voiceChannelId) {
   });
 
   return s;
+}
+
+function lastErrorLine(text) {
+  const lines = String(text || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const err = lines.filter((l) => /error/i.test(l));
+  return (err.length ? err[err.length - 1] : lines[lines.length - 1] || '').replace(/^ERROR:\s*/i, '').slice(0, 220);
+}
+
+/** Start yt-dlp and resolve once it produced audio data (or reject with its error). */
+function ytdlpStream(url) {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-f', 'bestaudio[ext=webm]/bestaudio/best',
+      '-o', '-',
+      '--no-playlist',
+      '--no-warnings',
+      '--quiet',
+      '--no-progress',
+      '--js-runtimes', 'node',
+    ];
+    if (ytCookieFile) args.push('--cookies', ytCookieFile);
+    args.push(url);
+
+    let proc;
+    try {
+      proc = spawn('yt-dlp', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (e) {
+      reject(new Error('yt-dlp not available: ' + e.message));
+      return;
+    }
+
+    let err = '';
+    let settled = false;
+    const finish = (fn, v) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn(v);
+    };
+    const timer = setTimeout(() => {
+      try {
+        proc.kill('SIGKILL');
+      } catch {
+        /* */
+      }
+      finish(reject, new Error('yt-dlp timeout (45s)'));
+    }, 45_000);
+
+    proc.stderr.on('data', (d) => {
+      err += d.toString();
+      if (err.length > 6000) err = err.slice(-6000);
+    });
+    proc.on('error', (e) => finish(reject, new Error('yt-dlp not available: ' + e.message)));
+    proc.stdout.once('readable', () => finish(resolve, { stream: proc.stdout, proc }));
+    proc.on('close', (code) => {
+      if (!settled) finish(reject, new Error(lastErrorLine(err) || 'yt-dlp exited with code ' + code));
+    });
+  });
 }
 
 /** SoundCloud fallback when YouTube blocks the server IP. Returns a play-dl stream or null. */
@@ -283,6 +403,7 @@ async function playTrack(guild, track) {
   if (!s) throw new Error('No voice session');
 
   const url = ytUrl(track.url || track.id);
+  killYtdlp(s);
 
   // Direct MP3 / radio stream: ffmpeg handles it, no YouTube involved.
   if (isDirectAudio(url)) {
@@ -292,27 +413,36 @@ async function playTrack(guild, track) {
     return 'Playing (direct audio)';
   }
 
-  if (!playdl) throw new Error('play-dl not available');
-
-  let streamInfo = null;
   let firstErr = null;
-  let source = 'YouTube';
 
-  try {
-    streamInfo = await playdl.stream(url, { discordPlayerCompatibility: true });
-  } catch (e) {
-    firstErr = e;
-    console.warn('[music] youtube stream failed:', e && e.message ? e.message : e);
-    if (track.title) {
-      try {
-        const found = await playdl.search(track.title, { limit: 1 });
-        if (found[0]?.url) streamInfo = await playdl.stream(found[0].url, { discordPlayerCompatibility: true });
-      } catch {
-        /* try SoundCloud next */
-      }
+  // 1) YouTube via yt-dlp
+  if (isYouTube(url)) {
+    try {
+      const { stream, proc } = await ytdlpStream(url);
+      s.ytproc = proc;
+      const resource = createAudioResource(stream, { inputType: StreamType.Arbitrary });
+      s.current = { ...track, url };
+      s.player.play(resource);
+      return 'Playing (YouTube via yt-dlp)';
+    } catch (e) {
+      firstErr = e;
+      console.warn('[music] yt-dlp failed:', e && e.message ? e.message : e);
     }
   }
 
+  // 2) play-dl
+  let streamInfo = null;
+  let source = 'YouTube';
+  if (playdl) {
+    try {
+      streamInfo = await playdl.stream(url, { discordPlayerCompatibility: true });
+    } catch (e) {
+      if (!firstErr) firstErr = e;
+      console.warn('[music] play-dl failed:', e && e.message ? e.message : e);
+    }
+  }
+
+  // 3) SoundCloud
   if (!streamInfo) {
     streamInfo = await soundcloudFallback(track);
     if (streamInfo) source = 'SoundCloud';
@@ -356,7 +486,7 @@ async function sendMiniPlayer(client, row, payload, channelId) {
   const voiceId = cfg.voiceChannelId || cfg.musicVoiceChannelId || payload.voiceChannelId;
   if (voiceId && ch.guild) voiceHint.set(ch.guild.id, String(voiceId));
   let audioResult = 'Embed sent (no VC configured — press ▶ Play in a voice channel, or set Voice channel ID on the bot)';
-  if (voiceId && ch.guild && (direct || playdl)) {
+  if (voiceId && ch.guild) {
     try {
       const s = await ensureSession(ch.guild, String(voiceId));
       s.textChannelId = textId;
