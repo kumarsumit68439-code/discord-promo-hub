@@ -5,7 +5,8 @@
  * - Real audio via play-dl + @discordjs/voice:
  *     * auto-plays in the configured voice channel when the website sends a track
  *     * the Play button plays the track in the voice channel the clicker is in
- * - Optional YOUTUBE_COOKIE env var (helps with "Sign in to confirm you're not a bot")
+ * - If YouTube blocks the server ("Sign in to confirm you're not a bot"), falls back to SoundCloud
+ * - Optional YOUTUBE_COOKIE env var
  */
 const {
   EmbedBuilder,
@@ -44,6 +45,8 @@ const EPHEMERAL = 64;
 const sessions = new Map();
 /** guildId -> configured voice channel id (fallback for the Play button) */
 const voiceHint = new Map();
+
+let soundcloudReady = false;
 
 function ytUrl(idOrUrl) {
   const s = String(idOrUrl || '');
@@ -189,28 +192,62 @@ async function ensureSession(guild, voiceChannelId) {
   return s;
 }
 
+/** SoundCloud fallback when YouTube blocks the server IP. Returns a play-dl stream or null. */
+async function soundcloudFallback(track) {
+  if (!playdl) return null;
+  try {
+    if (!soundcloudReady) {
+      const clientId = await playdl.getFreeClientID();
+      playdl.setToken({ soundcloud: { client_id: clientId } });
+      soundcloudReady = true;
+    }
+    const q = [track.title, track.channel].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (!q) return null;
+    const found = await playdl.search(q, { source: { soundcloud: 'tracks' }, limit: 1 });
+    if (found && found[0] && found[0].url) {
+      return await playdl.stream(found[0].url);
+    }
+  } catch (e) {
+    console.warn('[music] soundcloud fallback failed:', e.message || e);
+  }
+  return null;
+}
+
 async function playTrack(guild, track) {
   if (!playdl) throw new Error('play-dl not available');
   const s = sessions.get(guild.id);
   if (!s) throw new Error('No voice session');
 
   const url = ytUrl(track.url || track.id);
-  let streamInfo;
+  let streamInfo = null;
+  let firstErr = null;
+  let source = 'YouTube';
+
   try {
     streamInfo = await playdl.stream(url, { discordPlayerCompatibility: true });
   } catch (e) {
-    // fallback: search by title
+    firstErr = e;
     if (track.title) {
-      const found = await playdl.search(track.title, { limit: 1 });
-      if (found[0]?.url) streamInfo = await playdl.stream(found[0].url, { discordPlayerCompatibility: true });
+      try {
+        const found = await playdl.search(track.title, { limit: 1 });
+        if (found[0]?.url) streamInfo = await playdl.stream(found[0].url, { discordPlayerCompatibility: true });
+      } catch {
+        /* try SoundCloud next */
+      }
     }
-    if (!streamInfo) throw e;
   }
+
+  if (!streamInfo) {
+    streamInfo = await soundcloudFallback(track);
+    if (streamInfo) source = 'SoundCloud';
+  }
+
+  if (!streamInfo) throw firstErr || new Error('No playable source found');
 
   const resource = createAudioResource(streamInfo.stream, { inputType: streamInfo.type });
   s.current = { ...track, url };
   s.player.play(resource);
-  return 'Playing in voice';
+  return 'Playing (' + source + ')';
 }
 
 /**
@@ -250,8 +287,8 @@ async function sendMiniPlayer(client, row, payload, channelId) {
         s.queue.push({ id: videoId, url, title, channel: channelName, thumbnail, messageId: msg.id });
         audioResult = 'Queued in VC (' + s.queue.length + ' ahead)';
       } else {
-        await playTrack(ch.guild, { id: videoId, url, title, channel: channelName, thumbnail, messageId: msg.id });
-        audioResult = 'Playing in voice channel';
+        const r = await playTrack(ch.guild, { id: videoId, url, title, channel: channelName, thumbnail, messageId: msg.id });
+        audioResult = r + ' in voice channel';
       }
     } catch (e) {
       audioResult = 'Embed sent; audio failed: ' + (e.message || e);
@@ -305,8 +342,8 @@ async function handleButton(interaction) {
           sess.queue.push(track);
           await interaction.editReply('➕ Queue me add hua (' + sess.queue.length + ' aage).');
         } else {
-          await playTrack(guild, track);
-          await interaction.editReply('▶️ Voice channel me play ho raha hai.');
+          const r = await playTrack(guild, track);
+          await interaction.editReply('▶️ ' + r + ' · voice channel me chal raha hai.');
         }
       } catch (e) {
         await interaction.editReply('❌ Play nahi ho paya: ' + (e.message || e));
