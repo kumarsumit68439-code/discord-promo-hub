@@ -1,5 +1,16 @@
+const http = require('http');
 const { createBot } = require('./bot');
 const { runHosted } = require('./hosted');
+
+// Health check server so platforms (Back4App, Railway, etc.) mark the container as healthy
+const PORT = process.env.PORT || 8080;
+const healthServer = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('OK');
+});
+healthServer.listen(PORT, () => {
+  console.log(`Health check server listening on port ${PORT}`);
+});
 
 process.on('unhandledRejection', err => console.error('Unhandled rejection:', err));
 
