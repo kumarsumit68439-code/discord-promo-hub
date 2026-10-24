@@ -3,7 +3,7 @@
  * - Website queues music_play → worker sends interactive mini-player embed
  * - Buttons (play / pause / resume / skip / stop) work via Discord component interactions
  * - Real audio via @discordjs/voice:
- *     * YouTube: yt-dlp first (standalone binary, node as JS runtime), then play-dl, then SoundCloud
+ *     * YouTube: yt-dlp first (Opus passthrough, no transcoding → low CPU), then play-dl, then SoundCloud
  *     * direct MP3 / radio stream URLs (any non-YouTube http(s) link) via ffmpeg
  *     * auto-plays in the configured voice channel when the website sends a track
  *     * the Play button plays the track in the voice channel the clicker is in
@@ -311,6 +311,10 @@ async function ensureSession(guild, voiceChannelId) {
   s = { player, connection, queue: [], current: null, textChannelId: null, ytproc: null };
   sessions.set(guild.id, s);
 
+  player.on('stateChange', (oldState, newState) => {
+    if (oldState.status !== newState.status) console.log('[music] player ' + oldState.status + ' -> ' + newState.status);
+  });
+
   player.on(AudioPlayerStatus.Idle, () => {
     killYtdlp(s);
     const next = s.queue.shift();
@@ -337,11 +341,15 @@ function lastErrorLine(text) {
   return (err.length ? err[err.length - 1] : lines[lines.length - 1] || '').replace(/^ERROR:\s*/i, '').slice(0, 220);
 }
 
-/** Start yt-dlp and resolve once it produced audio data (or reject with its error). */
-function ytdlpStream(url) {
+/**
+ * Start yt-dlp and resolve once it produced audio data (or reject with its error).
+ * opusOnly=true asks for the WebM/Opus stream so Discord can use it without any transcoding (low CPU).
+ */
+function ytdlpStream(url, opusOnly) {
   return new Promise((resolve, reject) => {
+    const format = opusOnly ? '251/bestaudio[acodec=opus][ext=webm]' : 'bestaudio/best';
     const args = [
-      '-f', 'bestaudio[ext=webm]/bestaudio/best',
+      '-f', format,
       '-o', '-',
       '--no-playlist',
       '--no-warnings',
@@ -427,18 +435,23 @@ async function playTrack(guild, track) {
 
   let firstErr = null;
 
-  // 1) YouTube via yt-dlp
+  // 1) YouTube via yt-dlp: Opus passthrough first (no CPU cost), generic stream + ffmpeg as backup
   if (isYouTube(url)) {
-    try {
-      const { stream, proc } = await ytdlpStream(url);
-      s.ytproc = proc;
-      const resource = createAudioResource(stream, { inputType: StreamType.Arbitrary });
-      s.current = { ...track, url };
-      s.player.play(resource);
-      return 'Playing (YouTube via yt-dlp)';
-    } catch (e) {
-      firstErr = e;
-      console.warn('[music] yt-dlp failed:', e && e.message ? e.message : e);
+    for (const opusOnly of [true, false]) {
+      try {
+        const { stream, proc } = await ytdlpStream(url, opusOnly);
+        s.ytproc = proc;
+        const resource = createAudioResource(stream, {
+          inputType: opusOnly ? StreamType.WebmOpus : StreamType.Arbitrary,
+        });
+        resource.playStream.on('error', (e) => console.error('[music] stream error', e.message));
+        s.current = { ...track, url };
+        s.player.play(resource);
+        return 'Playing (YouTube via yt-dlp' + (opusOnly ? ', opus' : ', ffmpeg') + ')';
+      } catch (e) {
+        if (!firstErr) firstErr = e;
+        console.warn('[music] yt-dlp ' + (opusOnly ? 'opus' : 'generic') + ' failed:', e && e.message ? e.message : e);
+      }
     }
   }
 
