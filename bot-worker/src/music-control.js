@@ -7,7 +7,9 @@
  *     * direct MP3 / radio stream URLs (any non-YouTube http(s) link) via ffmpeg
  *     * auto-plays in the configured voice channel when the website sends a track
  *     * the Play button plays the track in the voice channel the clicker is in
- * - Optional YOUTUBE_COOKIE env var (header string, "name=value; name2=value2", or Cookie-Editor JSON)
+ * - Optional YouTube cookies: YOUTUBE_COOKIE (+ YOUTUBE_COOKIE_2 ... YOUTUBE_COOKIE_10 when the host
+ *   limits a variable to ~1000 chars). Split ONLY between cookies ("a=1;" | "b=2;").
+ *   Header string, "name=value; name2=value2", or Cookie-Editor JSON is accepted.
  */
 const fs = require('fs');
 const os = require('os');
@@ -64,6 +66,16 @@ function cleanCookie(raw) {
   return c;
 }
 
+/** Read YOUTUBE_COOKIE and optional YOUTUBE_COOKIE_2..10 (hosts like Back4App cap a variable at 1023 chars). */
+function readCookieEnv() {
+  const parts = [process.env.YOUTUBE_COOKIE];
+  for (let i = 2; i <= 10; i++) parts.push(process.env['YOUTUBE_COOKIE_' + i]);
+  return parts
+    .map((p) => String(p || '').trim().replace(/^cookie\s*:\s*/i, '').replace(/^;+|;+$/g, '').trim())
+    .filter(Boolean)
+    .join('; ');
+}
+
 /** yt-dlp needs a Netscape cookie file; build one from the header string. */
 function writeCookieFile(cookie) {
   try {
@@ -85,7 +97,7 @@ function writeCookieFile(cookie) {
   }
 }
 
-const ytCookie = cleanCookie(process.env.YOUTUBE_COOKIE);
+const ytCookie = cleanCookie(readCookieEnv());
 let ytCookieFile = null;
 if (ytCookie) {
   const names = ytCookie
