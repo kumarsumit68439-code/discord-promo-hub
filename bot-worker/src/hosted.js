@@ -3,8 +3,10 @@ const ws = require('ws');
 const { createBot } = require('./bot');
 const setupBuilder = require('./setup-builder');
 const musicControl = require('./music-control');
+const musicCommands = require('./music-commands');
 
 const AI_BASE = { groq: 'https://api.groq.com/openai/v1', xai: 'https://api.x.ai/v1' };
+const AI_ENV = { groq: 'GROQ_API_KEY', xai: 'XAI_API_KEY' };
 const SYNC_MS = 30_000;
 const HEARTBEAT_MS = 60_000;
 const TEST_POLL_MS = 5_000;
@@ -87,6 +89,10 @@ async function runHosted() {
     if (!row.modules.includes('ai') || !provider) return undefined;
     const { data } = await db.rpc('get_bot_provider_secret', { p_user_id: row.user_id, p_provider: provider });
     if (!data?.api_key || !data?.model) return undefined;
+    // Some features (e.g. voice AI) read the key from the environment. If the host has no
+    // GROQ_API_KEY / XAI_API_KEY set, reuse the key the owner saved on the website.
+    const envName = AI_ENV[provider];
+    if (envName && !process.env[envName]) process.env[envName] = data.api_key;
     return { apiKey: data.api_key, model: data.model, baseUrl: AI_BASE[provider] };
   }
 
@@ -176,6 +182,11 @@ async function runHosted() {
       musicControl.attach(entry.bot.client);
     } catch (e) {
       console.error('[' + row.client_id + '] music attach', e.message);
+    }
+    try {
+      musicCommands.attach(entry.bot, row);
+    } catch (e) {
+      console.error('[' + row.client_id + '] music commands attach', e.message);
     }
 
     running.set(row.id, entry);
