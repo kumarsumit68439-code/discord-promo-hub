@@ -7,7 +7,12 @@
  */
 const { spawn } = require('child_process');
 const { SlashCommandBuilder } = require('discord.js');
-const { getVoiceConnection } = require('@discordjs/voice');
+let getVoiceConnection = () => null;
+try {
+  getVoiceConnection = require('@discordjs/voice').getVoiceConnection;
+} catch (err) {
+  console.error('[music-commands] voice load failed:', err.message);
+}
 const music = require('./music-control');
 
 const EPHEMERAL = 64;
@@ -25,7 +30,7 @@ const SONG_COMMAND = new SlashCommandBuilder()
   .addSubcommand((s) => s.setName('leave').setDescription('Bot leaves the voice channel'));
 
 function isHttp(s) {
-  return /^https?:\/\//i.test(String(s || ''));
+  return /^https?:\/\/\/i.test(String(s || ''));
 }
 
 function isYouTubeLink(s) {

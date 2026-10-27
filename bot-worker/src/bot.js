@@ -1,8 +1,9 @@
 const path = require('path');
+const fs = require('fs');
+const zlib = require('zlib');
+const Module = require('module');
 
 // Fix: "parent_id[CHANNEL_PARENT_INVALID_TYPE]: Not a category".
-// If the Ticket category ID saved on the website is not a real category (for example a text channel ID),
-// Discord rejects channel creation. Drop an invalid parent so the ticket channel is still created.
 try {
   const { GuildChannelManager, ChannelType } = require('discord.js');
   const originalCreate = GuildChannelManager.prototype.create;
@@ -12,9 +13,7 @@ try {
     if (parentId) {
       const parent = await this.guild.channels.fetch(String(parentId)).catch(() => null);
       if (!parent || parent.type !== ChannelType.GuildCategory) {
-        console.warn(
-          '[ticket] category ID ' + parentId + ' is not a category channel, creating the channel without a category'
-        );
+        console.warn('[ticket] category ID ' + parentId + ' is not a category channel, creating without category');
         const { parent: _ignored, ...rest } = options;
         options = rest;
       }
@@ -25,34 +24,49 @@ try {
   console.error('category guard not installed:', err.message);
 }
 
-// Prefer the real source file (bot.runtime.js). Fallback to gzipped parts if missing.
-let runtime;
-try {
-  runtime = require('./bot.runtime.js');
-} catch (err) {
-  console.error('[bot] failed to load bot.runtime.js:', err.message);
-  if (/davey|Class extends value/i.test(String(err && err.message) + String(err && err.stack))) {
-    console.error(
-      '[bot] @snazzah/davey native module failed. Rebuild image with g++/python3, or pin a working @snazzah/davey version.'
-    );
+function loadFromGzip() {
+  const b64 = [0, 1, 2, 3].map((i) => require('./bot-parts/gz' + i)).join('');
+  return zlib.gunzipSync(Buffer.from(b64, 'base64')).toString('utf8');
+}
+
+function loadRuntime() {
+  const runtimePath = path.join(__dirname, 'bot.runtime.js');
+
+  // 1) Prefer on-disk file if present
+  if (fs.existsSync(runtimePath)) {
+    try {
+      return require(runtimePath);
+    } catch (err) {
+      console.error('[bot] bot.runtime.js exists but failed to load:', err.message);
+    }
   }
-  // Legacy gzip parts fallback
+
+  // 2) Materialize from gzip parts, then require the real file (fixes virtual Module issues)
   try {
-    const zlib = require('zlib');
-    const Module = require('module');
-    const b64 = [0, 1, 2, 3].map((i) => require('./bot-parts/gz' + i)).join('');
-    const code = zlib.gunzipSync(Buffer.from(b64, 'base64')).toString('utf8');
-    const file = path.join(__dirname, 'bot.runtime.js');
-    const m = new Module(file);
-    m.filename = file;
+    const code = loadFromGzip();
+    fs.writeFileSync(runtimePath, code, 'utf8');
+    console.log('[bot] wrote bot.runtime.js from gzip parts (' + code.length + ' bytes)');
+    try {
+      delete require.cache[require.resolve(runtimePath)];
+    } catch (_) {}
+    return require(runtimePath);
+  } catch (err) {
+    console.error('[bot] gzip materialize failed:', err.message);
+  }
+
+  // 3) Last resort: in-memory Module compile
+  try {
+    const code = loadFromGzip();
+    const m = new Module(runtimePath);
+    m.filename = runtimePath;
     m.paths = Module._nodeModulePaths(__dirname);
-    m._compile(code, file);
-    runtime = m.exports;
-    console.warn('[bot] loaded via gzip fallback');
-  } catch (err2) {
-    console.error('[bot] gzip fallback also failed:', err2.message);
+    m._compile(code, runtimePath);
+    console.warn('[bot] loaded via in-memory Module compile');
+    return m.exports;
+  } catch (err) {
+    console.error('[bot] all load strategies failed:', err.message);
     throw err;
   }
 }
 
-module.exports = runtime;
+module.exports = loadRuntime();
