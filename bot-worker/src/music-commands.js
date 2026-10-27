@@ -30,7 +30,7 @@ const SONG_COMMAND = new SlashCommandBuilder()
   .addSubcommand((s) => s.setName('leave').setDescription('Bot leaves the voice channel'));
 
 function isHttp(s) {
-  return /^https?:\/\/\/i.test(String(s || ''));
+  return /^https?:\/\//i.test(String(s || ''));
 }
 
 function isYouTubeLink(s) {
