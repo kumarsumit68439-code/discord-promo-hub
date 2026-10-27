@@ -1,6 +1,6 @@
 {
   "name": "discord-promo-hub-worker",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "private": true,
   "description": "Persistent Discord Gateway worker for Promo Hub hosted bots",
   "main": "src/index.js",
