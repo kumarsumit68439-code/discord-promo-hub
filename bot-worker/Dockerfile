@@ -1,7 +1,7 @@
 # Persistent Discord Gateway worker — runs 24/7 on Railway / VPS / Back4App
 # Node 22 has native WebSocket, which @supabase/supabase-js realtime requires.
 # ffmpeg: direct MP3 / radio streams + transcoding. yt-dlp: YouTube audio.
-# Rebuild: 2026-10-27 fix COPY path (src must land under /app/src)
+# Rebuild: 2026-10-28 TMPDIR for yt-dlp
 FROM node:22-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -34,6 +34,10 @@ COPY src ./src
 RUN test -f /app/src/index.js && test -f /app/src/hosted.js && ls -la /app/src
 
 ENV NODE_ENV=production
+ENV TMPDIR=/tmp
+ENV TEMP=/tmp
+ENV TMP=/tmp
+ENV HOME=/tmp
 EXPOSE 8080
 
 CMD ["node", "src/index.js"]
