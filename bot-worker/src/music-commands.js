@@ -57,7 +57,6 @@ function isYouTubeLink(s) {
   return /^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(String(s || ''));
 }
 
-/** First YouTube search result via yt-dlp (no URL required — just a song name). */
 function ytSearch(query) {
   return new Promise((resolve, reject) => {
     let p;
@@ -130,7 +129,6 @@ async function resolveTrack(q) {
   if (isHttp(query)) {
     return { url: query, title: query };
   }
-  // Plain song name → YouTube search (no URL needed)
   return ytSearch(query);
 }
 
@@ -255,6 +253,7 @@ function attach(bot, row) {
           channel: track.channel,
           thumbnail: track.thumbnail,
           by: i.user.username,
+          voiceChannelId: vc.id,
         },
         textId
       );
