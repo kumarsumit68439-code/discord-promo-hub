@@ -1,9 +1,9 @@
 /**
- * Discord slash commands for music (guild-scoped, registered on startup):
- *   /song play query:<name or link>   search YouTube (yt-dlp) and play in your voice channel
- *   /song join                        bot joins your voice channel
- *   /song leave                       bot leaves the voice channel
- * Uses the same mini-player + audio pipeline as the website (music-control.js).
+ * Discord slash commands for music:
+ *   /music play query:<song name OR link>  — search YouTube by name (no URL needed) and play
+ *   /music search query:<song name>         — same as play (alias)
+ *   /music join / leave / skip / stop
+ *   /song ...                               — same commands (legacy alias)
  */
 const { spawn } = require('child_process');
 const { SlashCommandBuilder } = require('discord.js');
@@ -17,17 +17,37 @@ const music = require('./music-control');
 
 const EPHEMERAL = 64;
 
-const SONG_COMMAND = new SlashCommandBuilder()
-  .setName('song')
-  .setDescription('Promo Hub music')
-  .addSubcommand((s) =>
-    s
-      .setName('play')
-      .setDescription('Search and play a song in your voice channel')
-      .addStringOption((o) => o.setName('query').setDescription('Song name or link').setRequired(true))
-  )
-  .addSubcommand((s) => s.setName('join').setDescription('Bot joins your voice channel'))
-  .addSubcommand((s) => s.setName('leave').setDescription('Bot leaves the voice channel'));
+function buildMusicCommand(name) {
+  return new SlashCommandBuilder()
+    .setName(name)
+    .setDescription('Promo Hub music — play by song name or link')
+    .addSubcommand((s) =>
+      s
+        .setName('play')
+        .setDescription('Search YouTube by song name (no URL needed) or paste a link, then play')
+        .addStringOption((o) =>
+          o
+            .setName('query')
+            .setDescription('Song name (e.g. "Shape of You") or YouTube/audio link')
+            .setRequired(true)
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName('search')
+        .setDescription('Search and play a song by name (same as /music play)')
+        .addStringOption((o) =>
+          o.setName('query').setDescription('Song name to search on YouTube').setRequired(true)
+        )
+    )
+    .addSubcommand((s) => s.setName('join').setDescription('Bot joins your voice channel'))
+    .addSubcommand((s) => s.setName('leave').setDescription('Bot leaves the voice channel'))
+    .addSubcommand((s) => s.setName('skip').setDescription('Skip the current track'))
+    .addSubcommand((s) => s.setName('stop').setDescription('Stop music and clear queue'));
+}
+
+const MUSIC_COMMAND = buildMusicCommand('music');
+const SONG_COMMAND = buildMusicCommand('song');
 
 function isHttp(s) {
   return /^https?:\/\//i.test(String(s || ''));
@@ -37,7 +57,7 @@ function isYouTubeLink(s) {
   return /^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(String(s || ''));
 }
 
-/** First YouTube search result via yt-dlp (flat, fast). */
+/** First YouTube search result via yt-dlp (no URL required — just a song name). */
 function ytSearch(query) {
   return new Promise((resolve, reject) => {
     let p;
@@ -59,7 +79,7 @@ function ytSearch(query) {
       } catch {
         /* */
       }
-      reject(new Error('search timeout'));
+      reject(new Error('search timeout — try again or paste a YouTube link'));
     }, 30_000);
     p.stdout.on('data', (d) => (out += d));
     p.stderr.on('data', (d) => (err += d));
@@ -71,14 +91,14 @@ function ytSearch(query) {
       clearTimeout(timer);
       const line = out.split('\n').find((l) => l.trim().startsWith('{'));
       if (!line) {
-        reject(new Error(err.split('\n').filter(Boolean).pop() || 'no results'));
+        reject(new Error(err.split('\n').filter(Boolean).pop() || 'No YouTube results for: ' + query));
         return;
       }
       try {
         const j = JSON.parse(line);
         const thumbs = Array.isArray(j.thumbnails) ? j.thumbnails : [];
         resolve({
-          title: j.title || 'Track',
+          title: j.title || query,
           channel: j.channel || j.uploader || '',
           thumbnail: thumbs.length ? thumbs[thumbs.length - 1].url : '',
           url: isHttp(j.url) ? j.url : 'https://www.youtube.com/watch?v=' + j.id,
@@ -90,7 +110,6 @@ function ytSearch(query) {
   });
 }
 
-/** Title / author / thumbnail for a YouTube link (no yt-dlp needed). */
 async function ytOEmbed(url) {
   try {
     const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(url));
@@ -102,6 +121,19 @@ async function ytOEmbed(url) {
   }
 }
 
+async function resolveTrack(q) {
+  const query = String(q || '').trim();
+  if (!query) throw new Error('Song name empty');
+  if (isYouTubeLink(query)) {
+    return { url: query, ...(await ytOEmbed(query)) };
+  }
+  if (isHttp(query)) {
+    return { url: query, title: query };
+  }
+  // Plain song name → YouTube search (no URL needed)
+  return ytSearch(query);
+}
+
 function attach(bot, row) {
   const client = bot.client;
 
@@ -109,21 +141,25 @@ function attach(bot, row) {
     for (const g of client.guilds.cache.values()) {
       if (row.config && row.config.guildId && g.id !== row.config.guildId) continue;
       try {
+        await g.commands.create(MUSIC_COMMAND.toJSON());
         await g.commands.create(SONG_COMMAND.toJSON());
       } catch (e) {
         console.warn('[music-commands] register failed in ' + g.id + ':', e.message);
       }
     }
-    console.log('[' + row.client_id + '] /song commands registered');
+    console.log('[' + row.client_id + '] /music and /song commands registered');
   };
   client.once('clientReady', () => void register());
   client.once('ready', () => void register());
   client.on('guildCreate', (g) => {
+    g.commands.create(MUSIC_COMMAND.toJSON()).catch(() => null);
     g.commands.create(SONG_COMMAND.toJSON()).catch(() => null);
   });
 
   client.on('interactionCreate', async (i) => {
-    if (!i.isChatInputCommand() || i.commandName !== 'song' || !i.guild) return;
+    if (!i.isChatInputCommand() || !i.guild) return;
+    if (i.commandName !== 'music' && i.commandName !== 'song') return;
+
     try {
       const sub = i.options.getSubcommand();
 
@@ -131,18 +167,52 @@ function attach(bot, row) {
         const conn = getVoiceConnection(i.guild.id);
         if (conn) conn.destroy();
         if (bot.leaveVoice) await bot.leaveVoice().catch(() => null);
+        if (music.destroySession) music.destroySession(i.guild.id);
         await i.reply({ content: '👋 Voice channel chhod diya.', flags: EPHEMERAL });
         return;
       }
 
-      const vc = i.member && i.member.voice && i.member.voice.channel;
-      if (!vc) {
-        await i.reply({ content: '🔊 Pehle kisi voice channel me join karo.', flags: EPHEMERAL });
+      if (sub === 'stop') {
+        if (music.destroySession) music.destroySession(i.guild.id);
+        const conn = getVoiceConnection(i.guild.id);
+        if (conn) conn.destroy();
+        await i.reply({ content: '⏹️ Music band, queue clear.', flags: EPHEMERAL });
         return;
       }
-      await i.deferReply({ flags: EPHEMERAL });
+
+      if (sub === 'skip') {
+        try {
+          const sessions = music.sessions;
+          const s = sessions && sessions.get(i.guild.id);
+          if (s && s.player) {
+            s.player.stop(true);
+            await i.reply({ content: '⏭️ Skip.', flags: EPHEMERAL });
+          } else {
+            await i.reply({ content: 'Koi track nahi chal raha.', flags: EPHEMERAL });
+          }
+        } catch (e) {
+          await i.reply({ content: '❌ Skip fail: ' + (e.message || e), flags: EPHEMERAL });
+        }
+        return;
+      }
+
+      let vc = i.member && i.member.voice && i.member.voice.channel;
+      if (!vc) {
+        const conn = getVoiceConnection(i.guild.id);
+        if (conn && conn.joinConfig && conn.joinConfig.channelId) {
+          vc = await i.guild.channels.fetch(conn.joinConfig.channelId).catch(() => null);
+        }
+      }
+      if (!vc && row.config && row.config.voiceChannelId) {
+        vc = await i.guild.channels.fetch(String(row.config.voiceChannelId)).catch(() => null);
+      }
 
       if (sub === 'join') {
+        if (!vc) {
+          await i.reply({ content: '🔊 Pehle kisi voice channel me join karo.', flags: EPHEMERAL });
+          return;
+        }
+        await i.deferReply({ flags: EPHEMERAL });
         if (!bot.joinVoice) {
           await i.editReply('❌ Join abhi available nahi hai.');
           return;
@@ -152,19 +222,30 @@ function attach(bot, row) {
         return;
       }
 
-      // play
-      const q = i.options.getString('query', true).trim();
-      let track;
-      if (isYouTubeLink(q)) {
-        track = { url: q, ...(await ytOEmbed(q)) };
-      } else if (isHttp(q)) {
-        track = { url: q };
-      } else {
-        track = await ytSearch(q);
+      if (!vc) {
+        await i.reply({
+          content: '🔊 Pehle voice channel me join karo, phir `/music play query:song name` use karo.',
+          flags: EPHEMERAL,
+        });
+        return;
       }
 
+      await i.deferReply({ flags: EPHEMERAL });
+      const q = i.options.getString('query', true).trim();
+      await i.editReply('🔍 Searching: **' + q.slice(0, 80) + '** …');
+
+      const track = await resolveTrack(q);
+
       const textId = (row.config && row.config.musicChannelId) || i.channelId;
-      const patched = { ...row, config: { ...(row.config || {}), voiceChannelId: vc.id, musicChannelId: textId } };
+      const patched = {
+        ...row,
+        config: {
+          ...(row.config || {}),
+          voiceChannelId: vc.id,
+          musicChannelId: textId,
+        },
+      };
+
       const result = await music.sendMiniPlayer(
         client,
         patched,
@@ -177,7 +258,10 @@ function attach(bot, row) {
         },
         textId
       );
-      await i.editReply('🎵 ' + result);
+
+      await i.editReply(
+        '🎵 **' + String(track.title || q).slice(0, 120) + '**\n' + result
+      );
     } catch (e) {
       const msg = '❌ ' + String((e && e.message) || e).slice(0, 300);
       if (i.deferred || i.replied) await i.editReply(msg).catch(() => null);
