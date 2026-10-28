@@ -1,5 +1,5 @@
 /**
- * Music control — download YouTube audio to temp file, then play (fixes silent stream)
+ * Music control — download YouTube audio to temp file, then play
  */
 const fs = require('fs');
 const os = require('os');
@@ -358,14 +358,13 @@ function lastErrorLine(text) {
   return (err.length ? err[err.length - 1] : lines[lines.length - 1] || '').replace(/^ERROR:\s*/i, '').slice(0, 220);
 }
 
-/** Download full audio to temp file — stream pipes often play→idle with silence. */
 function ytdlpDownload(url) {
   return new Promise((resolve, reject) => {
     const id = 'dph-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
     const outTemplate = path.join(os.tmpdir(), id + '.%(ext)s');
     const args = [
       '-f',
-      'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+      'bestaudio/best/ba/b',
       '-o',
       outTemplate,
       '--no-playlist',
@@ -374,9 +373,9 @@ function ytdlpDownload(url) {
       '--js-runtimes',
       'node',
       '--extractor-args',
-      'youtube:player_client=android,web',
+      'youtube:player_client=android,web,tv',
       '--max-filesize',
-      '30M',
+      '50M',
     ];
     if (ytCookieFile) args.push('--cookies', ytCookieFile);
     args.push(url);
@@ -453,6 +452,9 @@ function friendlyPlayError(err) {
   }
   if (/sign in|confirm your age|members-only|private video/i.test(m)) {
     return 'This video needs login/age check. Add YOUTUBE_COOKIE on Back4App worker env.';
+  }
+  if (/format is not available/i.test(m)) {
+    return 'YouTube format unavailable for this video — try another song.';
   }
   return m.replace(/^ERROR:\s*/i, '').slice(0, 220);
 }
@@ -559,8 +561,7 @@ async function sendMiniPlayer(client, row, payload, channelId) {
 
   const voiceId = payload.voiceChannelId || cfg.voiceChannelId || cfg.musicVoiceChannelId;
   if (voiceId && ch.guild) voiceHint.set(ch.guild.id, String(voiceId));
-  let audioResult =
-    'Embed sent (no VC configured — set Voice channel ID on the bot)';
+  let audioResult = 'Embed sent (no VC configured — set Voice channel ID on the bot)';
   if (voiceId && ch.guild) {
     try {
       const s = await ensureSession(ch.guild, String(voiceId));
