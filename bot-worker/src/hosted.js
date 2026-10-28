@@ -193,13 +193,64 @@ async function runHosted() {
   const failed = new Map();
 
   async function aiConfig(row) {
-    const provider = row.config?.aiProvider;
-    if (!row.modules.includes('ai') || !provider) return undefined;
-    const { data } = await db.rpc('get_bot_provider_secret', { p_user_id: row.user_id, p_provider: provider });
-    if (!data?.api_key || !data?.model) return undefined;
+    if (!row.modules || !row.modules.includes('ai')) return undefined;
+
+    // Default provider: config → groq (empty aiProvider still works)
+    let provider = String((row.config && row.config.aiProvider) || '')
+      .toLowerCase()
+      .trim();
+    if (provider !== 'groq' && provider !== 'xai') provider = 'groq';
+
+    const defaultModel = {
+      groq: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+      xai: process.env.XAI_MODEL || 'grok-2-latest',
+    };
+
+    // 1) Website-saved key (bot_provider_settings + vault)
+    try {
+      const { data } = await db.rpc('get_bot_provider_secret', {
+        p_user_id: row.user_id,
+        p_provider: provider,
+      });
+      if (data && data.api_key) {
+        const model = data.model || defaultModel[provider];
+        const envName = AI_ENV[provider];
+        if (envName && !process.env[envName]) process.env[envName] = data.api_key;
+        console.log(
+          '[' + row.client_id + '] AI ready via website key · provider=' + provider + ' · model=' + model
+        );
+        return { apiKey: data.api_key, model, baseUrl: AI_BASE[provider] };
+      }
+    } catch (e) {
+      console.warn('[' + row.client_id + '] get_bot_provider_secret:', e.message || e);
+    }
+
+    // 2) Worker env fallback (GROQ_API_KEY / XAI_API_KEY on Back4App)
     const envName = AI_ENV[provider];
-    if (envName && !process.env[envName]) process.env[envName] = data.api_key;
-    return { apiKey: data.api_key, model: data.model, baseUrl: AI_BASE[provider] };
+    const envKey = envName ? process.env[envName] : '';
+    if (envKey && String(envKey).trim()) {
+      const model = defaultModel[provider];
+      console.log('[' + row.client_id + '] AI ready via worker env ' + envName + ' · model=' + model);
+      return { apiKey: String(envKey).trim(), model, baseUrl: AI_BASE[provider] };
+    }
+
+    for (const alt of ['groq', 'xai']) {
+      if (alt === provider) continue;
+      const altEnv = AI_ENV[alt];
+      const altKey = altEnv && process.env[altEnv];
+      if (altKey && String(altKey).trim()) {
+        const model = defaultModel[alt];
+        console.log('[' + row.client_id + '] AI ready via worker env ' + altEnv + ' · model=' + model);
+        return { apiKey: String(altKey).trim(), model, baseUrl: AI_BASE[alt] };
+      }
+    }
+
+    console.warn(
+      '[' +
+        row.client_id +
+        '] AI module ON but no API key. Set GROQ_API_KEY on Back4App OR save Groq key on website Hosting → AI provider.'
+    );
+    return undefined;
   }
 
   async function report(id, problem) {
@@ -243,6 +294,16 @@ async function runHosted() {
     const ai = await aiConfig(row);
     const config = { ...row.config, modules: row.modules, ai };
     const entry = { bot: null, row, updated_at: row.updated_at, hasAi: Boolean(ai), problem: null };
+    console.log(
+      '[' +
+        row.client_id +
+        '] start · modules=' +
+        (row.modules || []).join(',') +
+        ' · AI=' +
+        (ai ? 'on(' + ai.model + ')' : 'OFF') +
+        ' · aiChannel=' +
+        ((row.config && row.config.aiChannelId) || 'none')
+    );
     const firstTime = row.status !== 'online';
     config.onReady = async () => {
       try {
