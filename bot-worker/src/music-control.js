@@ -1,5 +1,5 @@
 /**
- * Music control — download YouTube audio to temp file, then play
+ * Music control — multi-client YouTube download + play (fixes page needs to be reloaded)
  */
 const fs = require('fs');
 const os = require('os');
@@ -358,26 +358,25 @@ function lastErrorLine(text) {
   return (err.length ? err[err.length - 1] : lines[lines.length - 1] || '').replace(/^ERROR:\s*/i, '').slice(0, 220);
 }
 
-function ytdlpDownload(url) {
+function ytdlpDownloadOnce(url, clientArg, useCookies) {
   return new Promise((resolve, reject) => {
     const id = 'dph-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
     const outTemplate = path.join(os.tmpdir(), id + '.%(ext)s');
     const args = [
-      '-f',
-      'bestaudio/best/ba/b',
-      '-o',
-      outTemplate,
+      '-f', 'bestaudio/best/ba/b',
+      '-o', outTemplate,
       '--no-playlist',
       '--no-warnings',
       '--no-progress',
-      '--js-runtimes',
-      'node',
-      '--extractor-args',
-      'youtube:player_client=android,web,tv',
-      '--max-filesize',
-      '50M',
+      '--js-runtimes', 'node',
+      '--max-filesize', '50M',
+      '--retries', '3',
+      '--fragment-retries', '3',
     ];
-    if (ytCookieFile) args.push('--cookies', ytCookieFile);
+    if (clientArg) {
+      args.push('--extractor-args', 'youtube:player_client=' + clientArg);
+    }
+    if (useCookies && ytCookieFile) args.push('--cookies', ytCookieFile);
     args.push(url);
 
     let proc;
@@ -390,11 +389,7 @@ function ytdlpDownload(url) {
 
     let err = '';
     const timer = setTimeout(() => {
-      try {
-        proc.kill('SIGKILL');
-      } catch {
-        /* */
-      }
+      try { proc.kill('SIGKILL'); } catch { /* */ }
       reject(new Error('yt-dlp download timeout (90s)'));
     }, 90_000);
 
@@ -412,17 +407,42 @@ function ytdlpDownload(url) {
       try {
         const files = fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith(id + '.'));
         if (files.length) found = path.join(os.tmpdir(), files[0]);
-      } catch {
-        /* */
-      }
+      } catch { /* */ }
       if (!found || !fs.existsSync(found) || fs.statSync(found).size < 1000) {
         reject(new Error(lastErrorLine(err) || 'yt-dlp download failed (code ' + code + ')'));
         return;
       }
-      console.log('[music] downloaded ' + found + ' (' + fs.statSync(found).size + ' bytes)');
+      console.log('[music] downloaded ' + found + ' (' + fs.statSync(found).size + ' bytes) client=' + (clientArg || 'default'));
       resolve(found);
     });
   });
+}
+
+/** Try several YouTube player clients — "page needs to be reloaded" is client-specific. */
+async function ytdlpDownload(url) {
+  const strategies = [
+    { client: 'ios', cookies: true },
+    { client: 'android', cookies: true },
+    { client: 'mweb', cookies: true },
+    { client: 'tv', cookies: true },
+    { client: 'web', cookies: true },
+    { client: 'ios', cookies: false },
+    { client: 'android', cookies: false },
+    { client: null, cookies: true },
+  ];
+
+  let lastErr = null;
+  for (const s of strategies) {
+    try {
+      console.log('[music] yt-dlp try client=' + (s.client || 'default') + ' cookies=' + !!s.cookies);
+      return await ytdlpDownloadOnce(url, s.client, s.cookies);
+    } catch (e) {
+      lastErr = e;
+      const msg = String((e && e.message) || e);
+      console.warn('[music] yt-dlp strategy failed:', msg.slice(0, 180));
+    }
+  }
+  throw lastErr || new Error('yt-dlp download failed for all strategies');
 }
 
 async function soundcloudFallback(track) {
@@ -455,6 +475,9 @@ function friendlyPlayError(err) {
   }
   if (/format is not available/i.test(m)) {
     return 'YouTube format unavailable for this video — try another song.';
+  }
+  if (/page needs to be reloaded|sign in to confirm/i.test(m)) {
+    return 'YouTube blocked this download. Update YOUTUBE_COOKIE on worker (fresh browser cookies) or try another song.';
   }
   return m.replace(/^ERROR:\s*/i, '').slice(0, 220);
 }
