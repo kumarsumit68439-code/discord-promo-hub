@@ -1,7 +1,7 @@
 /**
  * Music control for hosted bots:
  * - Website / Discord: search by song name → mini-player + VC audio via yt-dlp
- * - YouTube: yt-dlp only (play-dl is broken / Easter Egg errors)
+ * - YouTube: yt-dlp only (play-dl Easter Egg errors skipped)
  * - direct MP3 / radio via ffmpeg; SoundCloud title fallback
  * - Optional YOUTUBE_COOKIE (+ _2.._10) for age-restricted / blocked IPs
  */
@@ -233,11 +233,24 @@ async function ensureSession(guild, voiceChannelId) {
   let s = sessions.get(guild.id);
   if (s && s.connection) {
     const status = s.connection.state && s.connection.state.status;
-    const sameChannel = s.connection.joinConfig && s.connection.joinConfig.channelId === String(voiceChannelId);
+    const sameChannel =
+      s.connection.joinConfig && s.connection.joinConfig.channelId === String(voiceChannelId);
     if (status !== VoiceConnectionStatus.Destroyed && sameChannel) return s;
     destroySession(guild.id);
     s = null;
   }
+
+  // Clear any other @discordjs/voice connection (AFK/AI voice, stale join)
+  try {
+    const existing = getVoiceConnection(guild.id);
+    if (existing) {
+      console.log('[music] destroying existing voice connection before join');
+      existing.destroy();
+    }
+  } catch {
+    /* */
+  }
+  await new Promise((r) => setTimeout(r, 400));
 
   const channel = await guild.channels.fetch(String(voiceChannelId)).catch(() => null);
   const voiceTypes = new Set([ChannelType.GuildVoice, ChannelType.GuildStageVoice, 2, 13]);
@@ -254,22 +267,51 @@ async function ensureSession(guild, voiceChannelId) {
     );
   }
 
+  const me = guild.members.me || (await guild.members.fetchMe().catch(() => null));
+  if (me && channel.permissionsFor) {
+    const perms = channel.permissionsFor(me);
+    if (perms && !perms.has('Connect')) {
+      throw new Error('Bot missing Connect permission in voice channel: ' + channel.name);
+    }
+    if (perms && !perms.has('Speak')) {
+      throw new Error('Bot missing Speak permission in voice channel: ' + channel.name);
+    }
+  }
+
+  console.log('[music] joining voice ' + channel.name + ' (' + channel.id + ')');
+
   const connection = joinVoiceChannel({
     channelId: channel.id,
     guildId: guild.id,
     adapterCreator: guild.voiceAdapterCreator,
     selfDeaf: true,
+    selfMute: false,
+  });
+
+  connection.on('stateChange', (oldState, newState) => {
+    if (oldState.status !== newState.status) {
+      console.log('[music] voice ' + oldState.status + ' -> ' + newState.status);
+    }
   });
 
   try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
   } catch (e) {
+    const status = connection.state && connection.state.status;
     try {
       connection.destroy();
     } catch {
       /* */
     }
-    throw new Error('Could not join voice: ' + (e.message || e));
+    const msg = String((e && e.message) || e || '');
+    if (/aborted|timeout|AbortError/i.test(msg) || status !== VoiceConnectionStatus.Ready) {
+      throw new Error(
+        'Could not join voice (status=' +
+          (status || '?') +
+          '). Check: bot has Connect+Speak, channel not full. Try /music leave then play again.'
+      );
+    }
+    throw new Error('Could not join voice: ' + msg);
   }
 
   const player = createAudioPlayer();
@@ -279,7 +321,8 @@ async function ensureSession(guild, voiceChannelId) {
   sessions.set(guild.id, s);
 
   player.on('stateChange', (oldState, newState) => {
-    if (oldState.status !== newState.status) console.log('[music] player ' + oldState.status + ' -> ' + newState.status);
+    if (oldState.status !== newState.status)
+      console.log('[music] player ' + oldState.status + ' -> ' + newState.status);
   });
 
   player.on(AudioPlayerStatus.Idle, () => {
@@ -291,6 +334,7 @@ async function ensureSession(guild, voiceChannelId) {
 
   player.on('error', (err) => console.error('[music] player error', err.message));
 
+  console.log('[music] voice ready in ' + channel.name);
   return s;
 }
 
@@ -407,7 +451,6 @@ async function playTrack(guild, track) {
 
   let firstErr = null;
 
-  // YouTube → yt-dlp only (never play-dl — it returns Easter Egg joke errors)
   if (isYouTube(url)) {
     for (const opusOnly of [true, false]) {
       try {
