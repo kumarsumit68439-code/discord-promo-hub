@@ -1,5 +1,6 @@
 /**
- * Music control — multi-client YouTube download + play (fixes page needs to be reloaded)
+ * Music control — multi-client YouTube download + play
+ * Uses explicit writable temp (fixes yt-dlp PYI Could not create temporary directory)
  */
 const fs = require('fs');
 const os = require('os');
@@ -28,6 +29,45 @@ try {
   playdl = require('play-dl');
 } catch {
   playdl = null;
+}
+
+/** Writable temp for yt-dlp (PyInstaller needs TMPDIR; hosts sometimes break os.tmpdir()). */
+function musicTmpDir() {
+  const candidates = [
+    process.env.MUSIC_TMP,
+    '/tmp/dph-music',
+    path.join(process.cwd(), '.tmp-music'),
+    os.tmpdir(),
+  ].filter(Boolean);
+  for (const d of candidates) {
+    try {
+      fs.mkdirSync(d, { recursive: true });
+      fs.accessSync(d, fs.constants.W_OK);
+      return d;
+    } catch {
+      /* try next */
+    }
+  }
+  return '/tmp';
+}
+
+const MUSIC_TMP = musicTmpDir();
+try {
+  fs.mkdirSync(path.join(MUSIC_TMP, 'cache'), { recursive: true });
+} catch {
+  /* */
+}
+console.log('[music] temp dir =', MUSIC_TMP);
+
+function ytdlpEnv() {
+  return {
+    ...process.env,
+    TMPDIR: MUSIC_TMP,
+    TEMP: MUSIC_TMP,
+    TMP: MUSIC_TMP,
+    HOME: process.env.HOME || MUSIC_TMP,
+    XDG_CACHE_HOME: path.join(MUSIC_TMP, 'cache'),
+  };
 }
 
 function cleanCookie(raw) {
@@ -74,7 +114,7 @@ function writeCookieFile(cookie) {
       if (!name) continue;
       lines.push(['.youtube.com', 'TRUE', '/', 'TRUE', '2147483647', name, value].join('\t'));
     }
-    const file = path.join(os.tmpdir(), 'yt-cookies.txt');
+    const file = path.join(MUSIC_TMP, 'yt-cookies.txt');
     fs.writeFileSync(file, lines.join('\n') + '\n', { mode: 0o600 });
     return file;
   } catch (e) {
@@ -95,7 +135,7 @@ if (ytCookie) {
 }
 
 try {
-  const upd = spawn('yt-dlp', ['-U'], { stdio: 'ignore' });
+  const upd = spawn('yt-dlp', ['-U'], { stdio: 'ignore', env: ytdlpEnv() });
   upd.on('error', () => {});
 } catch {
   /* */
@@ -361,7 +401,7 @@ function lastErrorLine(text) {
 function ytdlpDownloadOnce(url, clientArg, useCookies) {
   return new Promise((resolve, reject) => {
     const id = 'dph-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-    const outTemplate = path.join(os.tmpdir(), id + '.%(ext)s');
+    const outTemplate = path.join(MUSIC_TMP, id + '.%(ext)s');
     const args = [
       '-f', 'bestaudio/best/ba/b',
       '-o', outTemplate,
@@ -381,7 +421,7 @@ function ytdlpDownloadOnce(url, clientArg, useCookies) {
 
     let proc;
     try {
-      proc = spawn('yt-dlp', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      proc = spawn('yt-dlp', args, { stdio: ['ignore', 'ignore', 'pipe'], env: ytdlpEnv() });
     } catch (e) {
       reject(new Error('yt-dlp not available: ' + e.message));
       return;
@@ -405,8 +445,8 @@ function ytdlpDownloadOnce(url, clientArg, useCookies) {
       clearTimeout(timer);
       let found = null;
       try {
-        const files = fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith(id + '.'));
-        if (files.length) found = path.join(os.tmpdir(), files[0]);
+        const files = fs.readdirSync(MUSIC_TMP).filter((f) => f.startsWith(id + '.'));
+        if (files.length) found = path.join(MUSIC_TMP, files[0]);
       } catch { /* */ }
       if (!found || !fs.existsSync(found) || fs.statSync(found).size < 1000) {
         reject(new Error(lastErrorLine(err) || 'yt-dlp download failed (code ' + code + ')'));
@@ -418,7 +458,6 @@ function ytdlpDownloadOnce(url, clientArg, useCookies) {
   });
 }
 
-/** Try several YouTube player clients — "page needs to be reloaded" is client-specific. */
 async function ytdlpDownload(url) {
   const strategies = [
     { client: 'ios', cookies: true },
@@ -478,6 +517,9 @@ function friendlyPlayError(err) {
   }
   if (/page needs to be reloaded|sign in to confirm/i.test(m)) {
     return 'YouTube blocked this download. Update YOUTUBE_COOKIE on worker (fresh browser cookies) or try another song.';
+  }
+  if (/could not create temporary directory/i.test(m)) {
+    return 'Server temp folder blocked — redeploy worker (TMPDIR fix).';
   }
   return m.replace(/^ERROR:\s*/i, '').slice(0, 220);
 }
