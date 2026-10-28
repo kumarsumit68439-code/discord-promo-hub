@@ -1,5 +1,5 @@
 /**
- * Music control — yt-dlp play, mini-player, voice join with force-fetch member VC
+ * Music control — yt-dlp + ffmpeg audio (Arbitrary stream avoids silent Opus mismatch)
  */
 const fs = require('fs');
 const os = require('os');
@@ -278,7 +278,7 @@ async function ensureSession(guild, voiceChannelId) {
     channelId: channel.id,
     guildId: guild.id,
     adapterCreator: guild.voiceAdapterCreator,
-    selfDeaf: true,
+    selfDeaf: false,
     selfMute: false,
   });
 
@@ -343,7 +343,9 @@ function lastErrorLine(text) {
 
 function ytdlpStream(url, opusOnly) {
   return new Promise((resolve, reject) => {
-    const format = opusOnly ? '251/bestaudio[acodec=opus][ext=webm]/bestaudio/best' : 'bestaudio/best';
+    const format = opusOnly
+      ? '251/bestaudio[acodec=opus][ext=webm]/bestaudio/best'
+      : 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best';
     const args = [
       '-f',
       format,
@@ -437,7 +439,8 @@ async function playTrack(guild, track) {
   killYtdlp(s);
 
   if (isDirectAudio(url)) {
-    const resource = createAudioResource(url, { inputType: StreamType.Arbitrary });
+    const resource = createAudioResource(url, { inputType: StreamType.Arbitrary, inlineVolume: true });
+    if (resource.volume) resource.volume.setVolume(1);
     s.current = { ...track, url };
     s.player.play(resource);
     return 'Playing (direct audio)';
@@ -446,17 +449,26 @@ async function playTrack(guild, track) {
   let firstErr = null;
 
   if (isYouTube(url)) {
-    for (const opusOnly of [true, false]) {
+    // Arbitrary/ffmpeg FIRST — pure WebmOpus often "plays" but is silent
+    for (const opusOnly of [false, true]) {
       try {
         const { stream, proc } = await ytdlpStream(url, opusOnly);
         s.ytproc = proc;
         const resource = createAudioResource(stream, {
-          inputType: opusOnly ? StreamType.WebmOpus : StreamType.Arbitrary,
+          inputType: StreamType.Arbitrary,
+          inlineVolume: true,
         });
+        if (resource.volume) resource.volume.setVolume(1);
         resource.playStream.on('error', (e) => console.error('[music] stream error', e.message));
         s.current = { ...track, url };
         s.player.play(resource);
-        return 'Playing (YouTube via yt-dlp' + (opusOnly ? ', opus' : ', ffmpeg') + ')';
+        console.log(
+          '[music] playing via yt-dlp mode=' +
+            (opusOnly ? 'opus-fmt' : 'bestaudio') +
+            ' player=' +
+            s.player.state.status
+        );
+        return 'Playing (YouTube via yt-dlp' + (opusOnly ? ', opus-fmt' : ', ffmpeg') + ')';
       } catch (e) {
         if (!firstErr) firstErr = e;
         console.warn('[music] yt-dlp ' + (opusOnly ? 'opus' : 'generic') + ' failed:', e && e.message ? e.message : e);
@@ -466,7 +478,8 @@ async function playTrack(guild, track) {
     try {
       const sc = await soundcloudFallback(track);
       if (sc) {
-        const resource = createAudioResource(sc.stream, { inputType: sc.type });
+        const resource = createAudioResource(sc.stream, { inputType: sc.type, inlineVolume: true });
+        if (resource.volume) resource.volume.setVolume(1);
         s.current = { ...track, url };
         s.player.play(resource);
         return 'Playing (SoundCloud fallback)';
@@ -481,7 +494,11 @@ async function playTrack(guild, track) {
   if (playdl && isHttp(url)) {
     try {
       const streamInfo = await playdl.stream(url, { discordPlayerCompatibility: true });
-      const resource = createAudioResource(streamInfo.stream, { inputType: streamInfo.type });
+      const resource = createAudioResource(streamInfo.stream, {
+        inputType: streamInfo.type,
+        inlineVolume: true,
+      });
+      if (resource.volume) resource.volume.setVolume(1);
       s.current = { ...track, url };
       s.player.play(resource);
       return 'Playing (stream)';
@@ -578,14 +595,11 @@ async function handleButton(interaction) {
       if (!vcId) vcId = voiceHint.get(guild.id);
       if (!vcId) {
         const conn = getVoiceConnection(guild.id);
-        if (conn && conn.joinConfig && conn.joinConfig.channelId) {
-          vcId = conn.joinConfig.channelId;
-        }
+        if (conn && conn.joinConfig && conn.joinConfig.channelId) vcId = conn.joinConfig.channelId;
       }
       if (!vcId) {
         await interaction.editReply(
-          '🔊 Pehle kisi **voice channel** me join karo (earphone icon wala), phir ▶ Play dabao.\n' +
-            'Hosting me Voice Channel ID bhi set karo agar auto-join chahiye.'
+          '🔊 Pehle kisi **voice channel** me join karo, phir ▶ Play dabao.\nHosting me Voice Channel ID bhi set karo.'
         );
         return true;
       }
