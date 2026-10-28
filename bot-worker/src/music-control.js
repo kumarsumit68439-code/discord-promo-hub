@@ -1,15 +1,9 @@
 /**
  * Music control for hosted bots:
- * - Website queues music_play → worker sends interactive mini-player embed
- * - Buttons (play / pause / resume / skip / stop) work via Discord component interactions
- * - Real audio via @discordjs/voice:
- *     * YouTube: yt-dlp first (Opus passthrough, no transcoding → low CPU), then play-dl, then SoundCloud
- *     * direct MP3 / radio stream URLs (any non-YouTube http(s) link) via ffmpeg
- *     * auto-plays in the configured voice channel when the website sends a track
- *     * the Play button plays the track in the voice channel the clicker is in
- * - Optional YouTube cookies: YOUTUBE_COOKIE (+ YOUTUBE_COOKIE_2 ... YOUTUBE_COOKIE_10 when the host
- *   limits a variable to ~1000 chars). Split ONLY between cookies ("a=1;" | "b=2;").
- *   Header string, "name=value; name2=value2", or Cookie-Editor JSON is accepted.
+ * - Website / Discord: search by song name → mini-player + VC audio via yt-dlp
+ * - YouTube: yt-dlp only (play-dl is broken / Easter Egg errors)
+ * - direct MP3 / radio via ffmpeg; SoundCloud title fallback
+ * - Optional YOUTUBE_COOKIE (+ _2.._10) for age-restricted / blocked IPs
  */
 const fs = require('fs');
 const os = require('os');
@@ -53,7 +47,7 @@ function cleanCookie(raw) {
           .join('; ');
       }
     } catch {
-      /* keep as is */
+      /* keep */
     }
   }
   c = c
@@ -103,27 +97,18 @@ if (ytCookie) {
     .filter(Boolean);
   console.log('[music] YOUTUBE_COOKIE loaded: ' + names.length + ' cookies (' + names.join(', ') + ')');
   ytCookieFile = writeCookieFile(ytCookie);
-  if (playdl) {
-    try {
-      playdl.setToken({ youtube: { cookie: ytCookie } });
-    } catch (e) {
-      console.warn('[music] could not set play-dl cookie:', e.message);
-    }
-  }
 }
 
 try {
   const upd = spawn('yt-dlp', ['-U'], { stdio: 'ignore' });
   upd.on('error', () => {});
 } catch {
-  /* yt-dlp not installed */
+  /* */
 }
 
 const EPHEMERAL = 64;
-
 const sessions = new Map();
 const voiceHint = new Map();
-
 let soundcloudReady = false;
 
 function isHttp(s) {
@@ -143,7 +128,8 @@ function isDirectAudio(url) {
   if (!isHttp(url)) return false;
   try {
     const host = new URL(url).hostname.toLowerCase();
-    if (/(^|\.)youtube\.com$|(^|\.)youtu\.be$|(^|\.)youtube-nocookie\.com$|(^|\.)soundcloud\.com$/.test(host)) return false;
+    if (/(^|\.)youtube\.com$|(^|\.)youtu\.be$|(^|\.)youtube-nocookie\.com$|(^|\.)soundcloud\.com$/.test(host))
+      return false;
     return true;
   } catch {
     return false;
@@ -179,37 +165,17 @@ function videoIdFrom(url) {
 
 function playerRow(videoId, paused) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('mph:play:' + videoId)
-      .setLabel('▶ Play')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId('mph:pause:' + videoId)
-      .setLabel('Pause')
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(!!paused),
-    new ButtonBuilder()
-      .setCustomId('mph:resume:' + videoId)
-      .setLabel('Resume')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!paused),
-    new ButtonBuilder()
-      .setCustomId('mph:skip:' + videoId)
-      .setLabel('Skip')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('mph:stop:' + videoId)
-      .setLabel('Stop')
-      .setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId('mph:play:' + videoId).setLabel('▶ Play').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('mph:pause:' + videoId).setLabel('Pause').setStyle(ButtonStyle.Primary).setDisabled(!!paused),
+    new ButtonBuilder().setCustomId('mph:resume:' + videoId).setLabel('Resume').setStyle(ButtonStyle.Secondary).setDisabled(!paused),
+    new ButtonBuilder().setCustomId('mph:skip:' + videoId).setLabel('Skip').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('mph:stop:' + videoId).setLabel('Stop').setStyle(ButtonStyle.Danger)
   );
 }
 
 function searchRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel('Search on website')
-      .setStyle(ButtonStyle.Link)
-      .setURL('https://discord-promo-hub.vercel.app/hosting')
+    new ButtonBuilder().setLabel('Search on website').setStyle(ButtonStyle.Link).setURL('https://discord-promo-hub.vercel.app/hosting')
   );
 }
 
@@ -277,9 +243,7 @@ async function ensureSession(guild, voiceChannelId) {
   const voiceTypes = new Set([ChannelType.GuildVoice, ChannelType.GuildStageVoice, 2, 13]);
   const isVoice =
     channel &&
-    (typeof channel.isVoiceBased === 'function'
-      ? channel.isVoiceBased()
-      : voiceTypes.has(channel.type));
+    (typeof channel.isVoiceBased === 'function' ? channel.isVoiceBased() : voiceTypes.has(channel.type));
   if (!channel || !isVoice) {
     throw new Error(
       'Voice channel not found (id=' +
@@ -303,7 +267,7 @@ async function ensureSession(guild, voiceChannelId) {
     try {
       connection.destroy();
     } catch {
-      /* already destroyed */
+      /* */
     }
     throw new Error('Could not join voice: ' + (e.message || e));
   }
@@ -321,16 +285,11 @@ async function ensureSession(guild, voiceChannelId) {
   player.on(AudioPlayerStatus.Idle, () => {
     killYtdlp(s);
     const next = s.queue.shift();
-    if (next) {
-      void playTrack(guild, next).catch(() => null);
-    } else {
-      s.current = null;
-    }
+    if (next) void playTrack(guild, next).catch(() => null);
+    else s.current = null;
   });
 
-  player.on('error', (err) => {
-    console.error('[music] player error', err.message);
-  });
+  player.on('error', (err) => console.error('[music] player error', err.message));
 
   return s;
 }
@@ -346,15 +305,20 @@ function lastErrorLine(text) {
 
 function ytdlpStream(url, opusOnly) {
   return new Promise((resolve, reject) => {
-    const format = opusOnly ? '251/bestaudio[acodec=opus][ext=webm]' : 'bestaudio/best';
+    const format = opusOnly ? '251/bestaudio[acodec=opus][ext=webm]/bestaudio/best' : 'bestaudio/best';
     const args = [
-      '-f', format,
-      '-o', '-',
+      '-f',
+      format,
+      '-o',
+      '-',
       '--no-playlist',
       '--no-warnings',
       '--quiet',
       '--no-progress',
-      '--js-runtimes', 'node',
+      '--js-runtimes',
+      'node',
+      '--extractor-args',
+      'youtube:player_client=android,web',
     ];
     if (ytCookieFile) args.push('--cookies', ytCookieFile);
     args.push(url);
@@ -416,6 +380,17 @@ async function soundcloudFallback(track) {
   return null;
 }
 
+function friendlyPlayError(err) {
+  const m = String((err && err.message) || err || '');
+  if (/easter egg|not possible to reach/i.test(m)) {
+    return 'YouTube audio blocked on this server. Set YOUTUBE_COOKIE on the worker, or try another song.';
+  }
+  if (/sign in|confirm your age|members-only|private video/i.test(m)) {
+    return 'This video needs login/age check. Add YOUTUBE_COOKIE on Back4App worker env.';
+  }
+  return m.replace(/^ERROR:\s*/i, '').slice(0, 220);
+}
+
 async function playTrack(guild, track) {
   const s = sessions.get(guild.id);
   if (!s) throw new Error('No voice session');
@@ -432,6 +407,7 @@ async function playTrack(guild, track) {
 
   let firstErr = null;
 
+  // YouTube → yt-dlp only (never play-dl — it returns Easter Egg joke errors)
   if (isYouTube(url)) {
     for (const opusOnly of [true, false]) {
       try {
@@ -449,30 +425,35 @@ async function playTrack(guild, track) {
         console.warn('[music] yt-dlp ' + (opusOnly ? 'opus' : 'generic') + ' failed:', e && e.message ? e.message : e);
       }
     }
+
+    try {
+      const sc = await soundcloudFallback(track);
+      if (sc) {
+        const resource = createAudioResource(sc.stream, { inputType: sc.type });
+        s.current = { ...track, url };
+        s.player.play(resource);
+        return 'Playing (SoundCloud fallback)';
+      }
+    } catch (e) {
+      console.warn('[music] soundcloud fallback failed:', e && e.message ? e.message : e);
+    }
+
+    throw new Error(friendlyPlayError(firstErr) || 'Could not play this YouTube track');
   }
 
-  let streamInfo = null;
-  let source = 'YouTube';
-  if (playdl) {
+  if (playdl && isHttp(url)) {
     try {
-      streamInfo = await playdl.stream(url, { discordPlayerCompatibility: true });
+      const streamInfo = await playdl.stream(url, { discordPlayerCompatibility: true });
+      const resource = createAudioResource(streamInfo.stream, { inputType: streamInfo.type });
+      s.current = { ...track, url };
+      s.player.play(resource);
+      return 'Playing (stream)';
     } catch (e) {
-      if (!firstErr) firstErr = e;
-      console.warn('[music] play-dl failed:', e && e.message ? e.message : e);
+      throw new Error(friendlyPlayError(e));
     }
   }
 
-  if (!streamInfo) {
-    streamInfo = await soundcloudFallback(track);
-    if (streamInfo) source = 'SoundCloud';
-  }
-
-  if (!streamInfo) throw firstErr || new Error('No playable source found');
-
-  const resource = createAudioResource(streamInfo.stream, { inputType: streamInfo.type });
-  s.current = { ...track, url };
-  s.player.play(resource);
-  return 'Playing (' + source + ')';
+  throw new Error(friendlyPlayError(firstErr) || 'No playable source found');
 }
 
 async function sendMiniPlayer(client, row, payload, channelId) {
@@ -498,10 +479,10 @@ async function sendMiniPlayer(client, row, payload, channelId) {
     components: [playerRow(videoId, false), searchRow()],
   });
 
-  // Prefer the VC the user is in (payload) over stale website config
   const voiceId = payload.voiceChannelId || cfg.voiceChannelId || cfg.musicVoiceChannelId;
   if (voiceId && ch.guild) voiceHint.set(ch.guild.id, String(voiceId));
-  let audioResult = 'Embed sent (no VC configured — press ▶ Play in a voice channel, or set Voice channel ID on the bot)';
+  let audioResult =
+    'Embed sent (no VC configured — press ▶ Play in a voice channel, or set Voice channel ID on the bot)';
   if (voiceId && ch.guild) {
     try {
       const s = await ensureSession(ch.guild, String(voiceId));
@@ -515,7 +496,7 @@ async function sendMiniPlayer(client, row, payload, channelId) {
         audioResult = r + ' in voice channel';
       }
     } catch (e) {
-      audioResult = 'Embed sent; audio failed: ' + (e.message || e);
+      audioResult = 'Embed sent; audio failed: ' + friendlyPlayError(e);
     }
   }
 
@@ -573,7 +554,7 @@ async function handleButton(interaction) {
           await interaction.editReply('▶️ ' + r + ' · voice channel me chal raha hai.');
         }
       } catch (e) {
-        await interaction.editReply('❌ Play nahi ho paya: ' + (e.message || e));
+        await interaction.editReply('❌ Play nahi ho paya: ' + friendlyPlayError(e));
       }
       return true;
     }
