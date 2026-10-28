@@ -1,5 +1,6 @@
 /**
  * Discord slash commands for music:
+ *   Set Voice Channel ID once on Hosting panel → /music play auto-joins that VC
  *   /music play query:<song name OR link>
  *   /music search / join / leave / skip / stop
  *   /song ... (alias)
@@ -193,13 +194,24 @@ function attach(bot, row) {
         return;
       }
 
-      let vc = i.member && i.member.voice && i.member.voice.channel;
-      if (!vc) {
-        try {
-          const member = await i.guild.members.fetch({ user: i.user.id, force: true });
-          vc = member && member.voice && member.voice.channel;
-        } catch {
-          /* */
+      // 1) Hosting Voice Channel ID (auto play — user need not be in VC)
+      // 2) User current VC
+      // 3) Bot already in a VC
+      let vc = null;
+      const configuredVcId =
+        (row.config && (row.config.voiceChannelId || row.config.musicVoiceChannelId)) || '';
+      if (configuredVcId) {
+        vc = await i.guild.channels.fetch(String(configuredVcId)).catch(() => null);
+      }
+      if (!vc || (typeof vc.isVoiceBased === 'function' ? !vc.isVoiceBased() : vc.type !== 2 && vc.type !== 13)) {
+        vc = i.member && i.member.voice && i.member.voice.channel;
+        if (!vc) {
+          try {
+            const member = await i.guild.members.fetch({ user: i.user.id, force: true });
+            vc = member && member.voice && member.voice.channel;
+          } catch {
+            /* */
+          }
         }
       }
       if (!vc) {
@@ -208,13 +220,14 @@ function attach(bot, row) {
           vc = await i.guild.channels.fetch(conn.joinConfig.channelId).catch(() => null);
         }
       }
-      if (!vc && row.config && row.config.voiceChannelId) {
-        vc = await i.guild.channels.fetch(String(row.config.voiceChannelId)).catch(() => null);
-      }
 
       if (sub === 'join') {
         if (!vc) {
-          await i.reply({ content: '🔊 Pehle kisi voice channel me join karo.', flags: EPHEMERAL });
+          await i.reply({
+            content:
+              '🔊 Hosting me **Voice Channel ID** set karo, ya pehle kisi voice channel me join karo.',
+            flags: EPHEMERAL,
+          });
           return;
         }
         await i.deferReply({ flags: EPHEMERAL });
@@ -229,7 +242,9 @@ function attach(bot, row) {
 
       if (!vc) {
         await i.reply({
-          content: '🔊 Pehle voice channel me join karo, phir `/music play query:song name` use karo.',
+          content:
+            '🔊 Pehle website **Hosting** me **Voice Channel ID** set karo (Discord VC right-click → Copy Channel ID), Save, phir `/music play` use karo.\n' +
+            'Ya khud us voice channel me join karke command do.',
           flags: EPHEMERAL,
         });
         return;
@@ -237,7 +252,7 @@ function attach(bot, row) {
 
       await i.deferReply({ flags: EPHEMERAL });
       const q = i.options.getString('query', true).trim();
-      await i.editReply('🔍 Searching: **' + q.slice(0, 80) + '** …');
+      await i.editReply('🔍 Searching: **' + q.slice(0, 80) + '** → VC: **' + vc.name + '** …');
 
       const track = await resolveTrack(q);
 
@@ -265,7 +280,9 @@ function attach(bot, row) {
         textId
       );
 
-      await i.editReply('🎵 **' + String(track.title || q).slice(0, 120) + '**\n' + result);
+      await i.editReply(
+        '🎵 **' + String(track.title || q).slice(0, 120) + '**\n🔊 ' + vc.name + '\n' + result
+      );
     } catch (e) {
       const msg = '❌ ' + String((e && e.message) || e).slice(0, 300);
       if (i.deferred || i.replied) await i.editReply(msg).catch(() => null);
