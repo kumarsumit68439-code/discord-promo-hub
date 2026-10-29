@@ -1,5 +1,5 @@
 /**
- * music-control.js — stable core + safe patches (name search, no play-dl YT)
+ * music-control.js — seek/next + name search + no play-dl YT
  */
 const Module = require('module');
 const fs = require('fs');
@@ -37,6 +37,7 @@ function applyPatches(code) {
     "return 'This video needs login/age check. Add YOUTUBE_COOKIE on Railway worker env.';"
   );
 
+  const nl = String.fromCharCode(10);
   const helper = [
     'async function __dphSearchYt(q, payload) {',
     '  const { spawn } = require("child_process");',
@@ -67,7 +68,21 @@ function applyPatches(code) {
     '  });',
     '}',
     '',
-  ].join(String.fromCharCode(10));
+    'async function __dphSeek(guild, deltaSec) {',
+    '  const s = sessions.get(guild.id);',
+    '  if (!s || !s.player) throw new Error("Koi track nahi chal raha");',
+    '  if (!s.ytFile || !require("fs").existsSync(s.ytFile)) throw new Error("Seek tabhi jab file play ho (YouTube download)");',
+    '  s.seekOffset = Math.max(0, (s.seekOffset || 0) + Number(deltaSec || 0));',
+    '  const { spawn } = require("child_process");',
+    '  const { createAudioResource, StreamType } = require("@discordjs/voice");',
+    '  const ff = spawn("ffmpeg", ["-ss", String(s.seekOffset), "-i", s.ytFile, "-f", "mp3", "-ac", "2", "-ar", "48000", "pipe:1"], { stdio: ["ignore", "pipe", "ignore"] });',
+    '  const resource = createAudioResource(ff.stdout, { inputType: StreamType.Arbitrary, inlineVolume: true });',
+    '  if (resource.volume) resource.volume.setVolume(1);',
+    '  s.player.play(resource);',
+    '  return s.seekOffset;',
+    '}',
+    '',
+  ].join(nl);
 
   const anchor = 'async function sendMiniPlayer(client, row, payload, channelId) {';
   if (code.includes(anchor) && !code.includes('__dphSearchYt')) {
@@ -85,13 +100,78 @@ function applyPatches(code) {
     "      url = ytUrl(payload.query || '');",
     "    }",
     "  }",
-  ].join(String.fromCharCode(10));
+  ].join(nl);
+  if (code.includes(old)) code = code.replace(old, neu);
 
-  if (code.includes(old)) {
-    code = code.replace(old, neu);
-  } else {
-    console.warn('[music] patch: url line not found');
-  }
+  code = code.replace(
+    /function playerRow\(videoId, paused\) \{[\s\S]*?\n\}/,
+    [
+      'function playerRow(videoId, paused) {',
+      '  return new ActionRowBuilder().addComponents(',
+      "    new ButtonBuilder().setCustomId('mph:back10:' + videoId).setLabel('-10s').setStyle(ButtonStyle.Secondary),",
+      "    new ButtonBuilder().setCustomId('mph:pause:' + videoId).setLabel('Pause').setStyle(ButtonStyle.Primary).setDisabled(!!paused),",
+      "    new ButtonBuilder().setCustomId('mph:next:' + videoId).setLabel('Next').setStyle(ButtonStyle.Success),",
+      "    new ButtonBuilder().setCustomId('mph:fwd10:' + videoId).setLabel('+10s').setStyle(ButtonStyle.Secondary),",
+      "    new ButtonBuilder().setCustomId('mph:stop:' + videoId).setLabel('Stop').setStyle(ButtonStyle.Danger)",
+      '  );',
+      '}',
+      'function playerRow2(videoId, paused) {',
+      '  return new ActionRowBuilder().addComponents(',
+      "    new ButtonBuilder().setCustomId('mph:back30:' + videoId).setLabel('-30s').setStyle(ButtonStyle.Secondary),",
+      "    new ButtonBuilder().setCustomId('mph:resume:' + videoId).setLabel('Resume').setStyle(ButtonStyle.Secondary).setDisabled(!paused),",
+      "    new ButtonBuilder().setCustomId('mph:skip:' + videoId).setLabel('Skip').setStyle(ButtonStyle.Secondary),",
+      "    new ButtonBuilder().setCustomId('mph:fwd30:' + videoId).setLabel('+30s').setStyle(ButtonStyle.Secondary),",
+      "    new ButtonBuilder().setCustomId('mph:play:' + videoId).setLabel('Play').setStyle(ButtonStyle.Success)",
+      '  );',
+      '}',
+    ].join(nl)
+  );
+
+  code = code.replace(
+    "components: [playerRow(videoId, false), searchRow()],",
+    "components: [playerRow(videoId, false), playerRow2(videoId, false), searchRow()],"
+  );
+
+  code = code.replace(
+    "    if (action === 'skip') {\n      if (s && s.player) s.player.stop(true);\n      await interaction.reply({ content: '⏭️ Skip', flags: EPHEMERAL });\n      return true;\n    }",
+    [
+      "    if (action === 'back10' || action === 'fwd10' || action === 'back30' || action === 'fwd30') {",
+      "      const map = { back10: -10, fwd10: 10, back30: -30, fwd30: 30 };",
+      "      try {",
+      "        const off = await __dphSeek(guild, map[action]);",
+      "        await interaction.reply({ content: 'Seek -> ' + off + 's', flags: EPHEMERAL });",
+      "      } catch (e) {",
+      "        await interaction.reply({ content: 'Seek fail: ' + (e.message || e), flags: EPHEMERAL });",
+      "      }",
+      "      return true;",
+      "    }",
+      "    if (action === 'next' || action === 'skip') {",
+      "      if (s && s.player) s.player.stop(true);",
+      "      const n = s && s.queue && s.queue.length ? s.queue.length : 0;",
+      "      await interaction.reply({ content: n ? ('Next - queue ' + n + ' left') : 'Next/Skip (empty queue = stop)', flags: EPHEMERAL });",
+      "      return true;",
+      "    }",
+    ].join(nl)
+  );
+
+  const strat =
+    "const strategies = [" +
+    "{ client: 'android', cookies: true }," +
+    "{ client: 'ios', cookies: true }," +
+    "{ client: 'mweb', cookies: true }," +
+    "{ client: 'tv_embedded', cookies: true }," +
+    "{ client: 'web_embedded', cookies: true }," +
+    "{ client: 'android', cookies: false }," +
+    "{ client: 'ios', cookies: false }," +
+    "{ client: null, cookies: true }," +
+    "{ client: null, cookies: false }," +
+    "];";
+  code = code.replace(/const strategies = \[[\s\S]*?\];/, strat);
+
+  code = code.replace(
+    "s.current = { ...track, url };\n      s.player.play(resource);\n      console.log(",
+    "s.current = { ...track, url };\n      s.seekOffset = 0;\n      s.player.play(resource);\n      console.log("
+  );
 
   return code;
 }
