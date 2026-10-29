@@ -1,6 +1,5 @@
 /**
- * AI Voice in VC — GROQ reply + TTS (Google translate TTS, no extra key)
- * Panel: text question → AI answer spoken in voice channel.
+ * AI Voice in VC — GROQ reply + TTS
  */
 const {
   EmbedBuilder,
@@ -24,35 +23,78 @@ function musicSessions() {
   }
 }
 
+function pickText(j) {
+  const c0 = j && j.choices && j.choices[0];
+  if (!c0) return '';
+  const m = c0.message || {};
+  const parts = [m.content, m.reasoning, m.reasoning_content, c0.text];
+  for (const p of parts) {
+    if (typeof p === 'string' && p.trim()) return p.trim();
+  }
+  return '';
+}
+
 async function groqReply(userText) {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new Error('GROQ_API_KEY Railway pe set nahi hai');
-  const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
-  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are a helpful Discord voice assistant. Answer in the same language as the user (Hindi or English). Keep answers short (1-3 sentences) for speaking aloud. No markdown, no emoji spam.',
-        },
-        { role: 'user', content: String(userText).slice(0, 500) },
-      ],
-      max_tokens: 180,
-      temperature: 0.7,
-    }),
-  });
-  if (!r.ok) {
-    const t = await r.text().catch(() => '');
-    throw new Error('GROQ HTTP ' + r.status + ' ' + t.slice(0, 120));
+
+  const models = [];
+  const envM = (process.env.GROQ_MODEL || '').trim();
+  const defaults = [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'gemma2-9b-it',
+  ];
+  if (envM && !/^openai\//i.test(envM)) models.push(envM);
+  for (const d of defaults) if (!models.includes(d)) models.push(d);
+  if (envM && !models.includes(envM)) models.push(envM);
+
+  let lastErr = null;
+  for (const model of models) {
+    try {
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a helpful Discord voice assistant. Answer in the same language as the user (Hindi or English). Keep answers short (1-3 sentences) for speaking aloud. No markdown.',
+            },
+            { role: 'user', content: String(userText).slice(0, 500) },
+          ],
+          max_tokens: 220,
+          temperature: 0.7,
+        }),
+      });
+      const raw = await r.text();
+      let j = {};
+      try {
+        j = JSON.parse(raw);
+      } catch {
+        lastErr = new Error('GROQ bad JSON ' + r.status);
+        continue;
+      }
+      if (!r.ok) {
+        lastErr = new Error('GROQ HTTP ' + r.status + ' model=' + model + ' ' + raw.slice(0, 100));
+        console.warn('[ai-voice]', lastErr.message);
+        continue;
+      }
+      const out = pickText(j);
+      if (out) {
+        console.log('[ai-voice] groq ok model=' + model);
+        return out;
+      }
+      lastErr = new Error('GROQ empty reply model=' + model);
+      console.warn('[ai-voice]', lastErr.message);
+    } catch (e) {
+      lastErr = e;
+      console.warn('[ai-voice] groq try', model, e.message || e);
+    }
   }
-  const j = await r.json();
-  const out = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
-  if (!out) throw new Error('GROQ empty reply');
-  return String(out).trim();
+  throw lastErr || new Error('GROQ empty reply');
 }
 
 async function ttsBuffer(text) {
@@ -99,8 +141,7 @@ function buildAiPanel() {
     .setTitle('AI Voice (VC)')
     .setDescription(
       'Bot **voice channel** me hai.\n' +
-        '**AI Speak** dabao \u2192 sawal likho \u2192 jawab **VC me voice** se aayega (GROQ).\n' +
-        '_Mic se direct sunna baad me; abhi text \u2192 AI \u2192 voice._'
+        '**AI Speak** \u2192 sawal \u2192 jawab **VC me voice** (GROQ).'
     )
     .setFooter({ text: 'GROQ_API_KEY from Railway env' });
   const row = new ActionRowBuilder().addComponents(
@@ -109,10 +150,7 @@ function buildAiPanel() {
       .setLabel('AI Speak in VC')
       .setEmoji('🎙️')
       .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId('aiv:help')
-      .setLabel('Help')
-      .setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('aiv:help').setLabel('Help').setStyle(ButtonStyle.Secondary)
   );
   return { embeds: [embed], components: [row] };
 }
@@ -130,11 +168,7 @@ function attach(client, row) {
     try {
       if (i.isButton() && i.customId === 'aiv:help') {
         await i.reply({
-          content:
-            '1) `/music join` se bot VC me aaye\n' +
-            '2) **AI Speak in VC** \u2192 sawal type karo\n' +
-            '3) GROQ jawab \u2192 bot **voice** me bolega\n' +
-            'Railway env: `GROQ_API_KEY` zaroori',
+          content: '1) `/music join`\n2) **AI Speak in VC**\n3) Sawal type \u2192 bot VC me bolega',
           flags: EPHEMERAL,
         });
         return;
@@ -142,7 +176,7 @@ function attach(client, row) {
       if (i.isButton() && i.customId === 'aiv:speak') {
         const modal = new ModalBuilder()
           .setCustomId('aiv:modal')
-          .setTitle('AI Voice \u2014 sawal poochho')
+          .setTitle('AI Voice \u2014 sawal')
           .addComponents(
             new ActionRowBuilder().addComponents(
               new TextInputBuilder()
@@ -151,7 +185,7 @@ function attach(client, row) {
                 .setStyle(TextInputStyle.Paragraph)
                 .setRequired(true)
                 .setMaxLength(400)
-                .setPlaceholder('Example: Gravity kya hai? / Aaj motivaton do')
+                .setPlaceholder('Example: Gravity kya hai?')
             )
           );
         await i.showModal(modal);
@@ -165,7 +199,7 @@ function attach(client, row) {
           await speakInGuild(i.guild, answer);
           await i.editReply('VC me bol raha hai:\n> ' + answer.slice(0, 300));
         } catch (e) {
-          await i.editReply('❌ ' + (e.message || e));
+          await i.editReply('\u274c ' + (e.message || e));
         }
       }
     } catch (e) {
