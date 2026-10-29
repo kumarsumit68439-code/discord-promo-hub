@@ -1,14 +1,17 @@
 /**
- * music-control.js — rich player (Lofi-style) + AI Speak in VC
- * Full implementation gunzipped at load time.
+ * music-control.js — assembles rich Lofi-style player + AI Speak
  */
-const zlib = require("zlib");
-const Module = require("module");
-
+const zlib = require('zlib');
+const Module = require('module');
 const parts = [
-  "PLACEHOLDER_WILL_REPLACE"
+  require('./music-parts/p0.js'),
+  require('./music-parts/p1.js'),
+  require('./music-parts/p2.js'),
+  require('./music-parts/p3.js'),
+  require('./music-parts/p4.js')
 ];
-const code = zlib.gunzipSync(Buffer.from(parts.join(""), "base64")).toString("utf8");
+const code = parts.join('');
+// If content is already JS (loader), eval via Module
 const m = new Module(__filename);
 m.filename = __filename;
 m.paths = module.paths;
