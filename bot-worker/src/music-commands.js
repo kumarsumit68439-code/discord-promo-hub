@@ -1,9 +1,5 @@
 /**
- * Discord slash commands for music:
- *   Set Voice Channel ID once on Hosting panel → /music play auto-joins that VC
- *   /music play query:<song name OR link>
- *   /music search / join / leave / skip / stop
- *   /song ... (alias)
+ * Discord slash commands for music
  */
 const { spawn } = require('child_process');
 const { SlashCommandBuilder } = require('discord.js');
@@ -26,23 +22,23 @@ function buildMusicCommand(name) {
     .addSubcommand((s) =>
       s
         .setName('play')
-        .setDescription('Search YouTube by song name (no URL needed) or paste a link, then play')
+        .setDescription('Search by song name (Spotify-style) or YouTube link, then play in VC')
         .addStringOption((o) =>
           o
             .setName('query')
-            .setDescription('Song name / Spotify-style name (e.g. "Blinding Lights The Weeknd") or YouTube link')
+            .setDescription('Song name e.g. Blinding Lights The Weeknd — or YouTube URL')
             .setRequired(true)
         )
     )
     .addSubcommand((s) =>
       s
         .setName('search')
-        .setDescription('Search and play a song by name (same as /music play)')
+        .setDescription('Same as play — search by name')
         .addStringOption((o) =>
-          o.setName('query').setDescription('Song name to search on YouTube').setRequired(true)
+          o.setName('query').setDescription('Song name').setRequired(true)
         )
     )
-    .addSubcommand((s) => s.setName('join').setDescription('Bot joins your voice channel'))
+    .addSubcommand((s) => s.setName('join').setDescription('Bot joins your voice channel + AI panel'))
     .addSubcommand((s) => s.setName('leave').setDescription('Bot leaves the voice channel'))
     .addSubcommand((s) => s.setName('skip').setDescription('Skip the current track'))
     .addSubcommand((s) => s.setName('stop').setDescription('Stop music and clear queue'));
@@ -75,12 +71,8 @@ function ytSearch(query) {
     let out = '';
     let err = '';
     const timer = setTimeout(() => {
-      try {
-        p.kill('SIGKILL');
-      } catch {
-        /* */
-      }
-      reject(new Error('search timeout — try again or paste a YouTube link'));
+      try { p.kill('SIGKILL'); } catch { /* */ }
+      reject(new Error('search timeout'));
     }, 30_000);
     p.stdout.on('data', (d) => (out += d));
     p.stderr.on('data', (d) => (err += d));
@@ -125,12 +117,8 @@ async function ytOEmbed(url) {
 async function resolveTrack(q) {
   const query = String(q || '').trim();
   if (!query) throw new Error('Song name empty');
-  if (isYouTubeLink(query)) {
-    return { url: query, ...(await ytOEmbed(query)) };
-  }
-  if (isHttp(query)) {
-    return { url: query, title: query };
-  }
+  if (isYouTubeLink(query)) return { url: query, ...(await ytOEmbed(query)) };
+  if (isHttp(query)) return { url: query, title: query };
   return ytSearch(query);
 }
 
@@ -209,9 +197,7 @@ function attach(bot, row) {
           try {
             const member = await i.guild.members.fetch({ user: i.user.id, force: true });
             vc = member && member.voice && member.voice.channel;
-          } catch {
-            /* */
-          }
+          } catch { /* */ }
         }
       }
       if (!vc) {
@@ -224,8 +210,7 @@ function attach(bot, row) {
       if (sub === 'join') {
         if (!vc) {
           await i.reply({
-            content:
-              'Hosting me **Voice Channel ID** set karo, ya pehle kisi voice channel me join karo.',
+            content: 'Hosting me Voice Channel ID set karo, ya pehle VC me join karo.',
             flags: EPHEMERAL,
           });
           return;
@@ -235,7 +220,7 @@ function attach(bot, row) {
           await i.editReply('Join abhi available nahi hai.');
           return;
         }
-        const r = await bot.joinVoice(vc.id);
+        await bot.joinVoice(vc.id);
         try {
           const textId = (row.config && row.config.musicChannelId) || i.channelId;
           const textCh = await client.channels.fetch(textId).catch(() => null);
@@ -251,9 +236,7 @@ function attach(bot, row) {
 
       if (!vc) {
         await i.reply({
-          content:
-            'Pehle website **Hosting** me **Voice Channel ID** set karo, phir `/music play` use karo.\n' +
-            'Ya khud us voice channel me join karke command do.',
+          content: 'Pehle Hosting me Voice Channel ID set karo, ya VC me join karke command do.',
           flags: EPHEMERAL,
         });
         return;
@@ -275,20 +258,7 @@ function attach(bot, row) {
         },
       };
 
-      const result = await music.sendMiniPlayer(
-        client,
-        patched,
-        {
-          url: track.url,
-          title: track.title,
-          channel: track.channel,
-          thumbnail: track.thumbnail,
-          by: i.user.username,
-          voiceChannelId: vc.id,
-        },
-        textId
-      );
-
+      // Panel FIRST so Discord server me Spotify/YT/Deezer buttons hamesha dikhen
       try {
         const textCh = await client.channels.fetch(textId).catch(() => null);
         if (textCh && textCh.isTextBased && textCh.isTextBased()) {
@@ -298,8 +268,34 @@ function attach(bot, row) {
         console.warn('[music] platform panel', e.message || e);
       }
 
+      let result = '';
+      try {
+        result = await music.sendMiniPlayer(
+          client,
+          patched,
+          {
+            url: track.url,
+            title: track.title,
+            channel: track.channel,
+            thumbnail: track.thumbnail,
+            by: i.user.username,
+            voiceChannelId: vc.id,
+          },
+          textId
+        );
+      } catch (playErr) {
+        result = 'Audio: ' + String((playErr && playErr.message) || playErr).slice(0, 180);
+        console.warn('[music] play after panel', result);
+      }
+
       await i.editReply(
-        '**' + String(track.title || q).slice(0, 120) + '**\n' + vc.name + '\n' + result
+        '**' +
+          String(track.title || q).slice(0, 120) +
+          '**\n' +
+          vc.name +
+          '\n' +
+          result +
+          '\nPanel: YouTube · YT Music · Spotify · Deezer · Instagram'
       );
     } catch (e) {
       const msg = '❌ ' + String((e && e.message) || e).slice(0, 300);
