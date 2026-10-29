@@ -14,6 +14,7 @@ try {
   console.error('[music-commands] voice load failed:', err.message);
 }
 const music = require('./music-control');
+const { buildNowPlayingPanel } = require('./music-panel');
 
 const EPHEMERAL = 64;
 
@@ -194,9 +195,6 @@ function attach(bot, row) {
         return;
       }
 
-      // 1) Hosting Voice Channel ID (auto play — user need not be in VC)
-      // 2) User current VC
-      // 3) Bot already in a VC
       let vc = null;
       const configuredVcId =
         (row.config && (row.config.voiceChannelId || row.config.musicVoiceChannelId)) || '';
@@ -279,6 +277,15 @@ function attach(bot, row) {
         },
         textId
       );
+
+      try {
+        const textCh = await client.channels.fetch(textId).catch(() => null);
+        if (textCh && textCh.isTextBased && textCh.isTextBased()) {
+          await textCh.send(buildNowPlayingPanel(track, i.user.username));
+        }
+      } catch (e) {
+        console.warn('[music] platform panel', e.message || e);
+      }
 
       await i.editReply(
         '🎵 **' + String(track.title || q).slice(0, 120) + '**\n🔊 ' + vc.name + '\n' + result
