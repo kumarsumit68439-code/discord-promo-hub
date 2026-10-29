@@ -1,4 +1,2 @@
-/**
- * RESTORED - see next commit for full file
- */
-module.exports = {};
+/** temp - will replace */
+module.exports = require('./music-control.js');
