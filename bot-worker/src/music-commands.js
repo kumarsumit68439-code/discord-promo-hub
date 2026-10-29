@@ -15,6 +15,7 @@ try {
 }
 const music = require('./music-control');
 const { buildNowPlayingPanel } = require('./music-panel');
+const aiVoice = require('./ai-voice');
 
 const EPHEMERAL = 64;
 
@@ -29,7 +30,7 @@ function buildMusicCommand(name) {
         .addStringOption((o) =>
           o
             .setName('query')
-            .setDescription('Song name (e.g. "Shape of You") or YouTube/audio link')
+            .setDescription('Song name / Spotify-style name (e.g. "Blinding Lights The Weeknd") or YouTube link')
             .setRequired(true)
         )
     )
@@ -135,6 +136,7 @@ async function resolveTrack(q) {
 
 function attach(bot, row) {
   const client = bot.client;
+  try { aiVoice.attach(client, row); } catch (e) { console.warn('[music] ai-voice', e.message); }
 
   const register = async () => {
     for (const g of client.guilds.cache.values()) {
@@ -167,7 +169,7 @@ function attach(bot, row) {
         if (conn) conn.destroy();
         if (bot.leaveVoice) await bot.leaveVoice().catch(() => null);
         if (music.destroySession) music.destroySession(i.guild.id);
-        await i.reply({ content: '👋 Voice channel chhod diya.', flags: EPHEMERAL });
+        await i.reply({ content: 'Voice channel chhod diya.', flags: EPHEMERAL });
         return;
       }
 
@@ -175,7 +177,7 @@ function attach(bot, row) {
         if (music.destroySession) music.destroySession(i.guild.id);
         const conn = getVoiceConnection(i.guild.id);
         if (conn) conn.destroy();
-        await i.reply({ content: '⏹️ Music band, queue clear.', flags: EPHEMERAL });
+        await i.reply({ content: 'Music band, queue clear.', flags: EPHEMERAL });
         return;
       }
 
@@ -185,12 +187,12 @@ function attach(bot, row) {
           const s = sessions && sessions.get(i.guild.id);
           if (s && s.player) {
             s.player.stop(true);
-            await i.reply({ content: '⏭️ Skip.', flags: EPHEMERAL });
+            await i.reply({ content: 'Skip.', flags: EPHEMERAL });
           } else {
             await i.reply({ content: 'Koi track nahi chal raha.', flags: EPHEMERAL });
           }
         } catch (e) {
-          await i.reply({ content: '❌ Skip fail: ' + (e.message || e), flags: EPHEMERAL });
+          await i.reply({ content: 'Skip fail: ' + (e.message || e), flags: EPHEMERAL });
         }
         return;
       }
@@ -223,25 +225,34 @@ function attach(bot, row) {
         if (!vc) {
           await i.reply({
             content:
-              '🔊 Hosting me **Voice Channel ID** set karo, ya pehle kisi voice channel me join karo.',
+              'Hosting me **Voice Channel ID** set karo, ya pehle kisi voice channel me join karo.',
             flags: EPHEMERAL,
           });
           return;
         }
         await i.deferReply({ flags: EPHEMERAL });
         if (!bot.joinVoice) {
-          await i.editReply('❌ Join abhi available nahi hai.');
+          await i.editReply('Join abhi available nahi hai.');
           return;
         }
         const r = await bot.joinVoice(vc.id);
-        await i.editReply('✅ ' + String(r || 'Joined') + ' · ' + vc.name);
+        try {
+          const textId = (row.config && row.config.musicChannelId) || i.channelId;
+          const textCh = await client.channels.fetch(textId).catch(() => null);
+          if (textCh && textCh.isTextBased && textCh.isTextBased()) {
+            await aiVoice.sendAiPanel(textCh);
+          }
+        } catch (e) {
+          console.warn('[music] ai panel on join', e.message || e);
+        }
+        await i.editReply('Joined · ' + vc.name + ' · AI Voice panel bhej diya');
         return;
       }
 
       if (!vc) {
         await i.reply({
           content:
-            '🔊 Pehle website **Hosting** me **Voice Channel ID** set karo (Discord VC right-click → Copy Channel ID), Save, phir `/music play` use karo.\n' +
+            'Pehle website **Hosting** me **Voice Channel ID** set karo, phir `/music play` use karo.\n' +
             'Ya khud us voice channel me join karke command do.',
           flags: EPHEMERAL,
         });
@@ -250,7 +261,7 @@ function attach(bot, row) {
 
       await i.deferReply({ flags: EPHEMERAL });
       const q = i.options.getString('query', true).trim();
-      await i.editReply('🔍 Searching: **' + q.slice(0, 80) + '** → VC: **' + vc.name + '** …');
+      await i.editReply('Searching: **' + q.slice(0, 80) + '** → VC: **' + vc.name + '** …');
 
       const track = await resolveTrack(q);
 
@@ -288,7 +299,7 @@ function attach(bot, row) {
       }
 
       await i.editReply(
-        '🎵 **' + String(track.title || q).slice(0, 120) + '**\n🔊 ' + vc.name + '\n' + result
+        '**' + String(track.title || q).slice(0, 120) + '**\n' + vc.name + '\n' + result
       );
     } catch (e) {
       const msg = '❌ ' + String((e && e.message) || e).slice(0, 300);
